@@ -24,6 +24,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.lifetrace.execute.ui.screens.CalendarScreen
+import com.lifetrace.execute.ui.screens.CloudConnectionScreen
 import com.lifetrace.execute.ui.screens.CollectionScreen
 import com.lifetrace.execute.ui.screens.ProfileScreen
 import com.lifetrace.execute.ui.screens.ProjectsScreen
@@ -135,7 +136,13 @@ fun LifeTraceExecuteApp() {
                 )
             }
             composable("profile") {
-                ProfileScreen(onBack = { navController.popBackStack() })
+                ProfileScreen(
+                    onBack = { navController.popBackStack() },
+                    onCloud = { navController.navigate("cloud") },
+                )
+            }
+            composable("cloud") {
+                CloudConnectionScreen(onBack = { navController.popBackStack() })
             }
             composable("review") {
                 ReviewScreen(onBack = { navController.popBackStack() })
