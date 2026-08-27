@@ -5,6 +5,7 @@ import androidx.room.withTransaction
 import com.lifetrace.execute.BuildConfig
 import com.lifetrace.execute.core.cloud.CloudApiException
 import com.lifetrace.execute.core.cloud.CloudSessionManager
+import com.lifetrace.execute.core.cloud.DeviceIdentityStore
 import com.lifetrace.execute.core.cloud.LifeTraceSyncClient
 import com.lifetrace.execute.core.cloud.OutgoingSyncChange
 import com.lifetrace.execute.core.cloud.PushChangeResult
@@ -30,20 +31,20 @@ class TaskSyncCoordinator(
     private val syncClient: LifeTraceSyncClient = LifeTraceSyncClient(),
 ) {
     private val dao = database.dao()
+    private val identityStore = DeviceIdentityStore(context.applicationContext)
     private val mutex = Mutex()
 
     suspend fun syncNow(): TaskSyncSummary = mutex.withLock {
         sessionManager.authorized { session ->
             val client = SyncClientContext(
                 clientVersion = BuildConfig.VERSION_NAME,
-                deviceId = com.lifetrace.execute.core.cloud.DeviceIdentityStore(context).deviceId(),
+                deviceId = identityStore.deviceId(),
                 schemaVersion = session.schemaVersion,
             )
             var snapshotItems = 0
             var pushed = 0
             var conflicts = 0
             var rejected = 0
-            var pulled = 0
 
             var state = dao.getSyncState(session.userId, TASK_SCOPE_KEY)
             if (state?.cursor == null) {
@@ -57,20 +58,20 @@ class TaskSyncCoordinator(
                 state = dao.getSyncState(session.userId, TASK_SCOPE_KEY)
             }
 
-            repeat(MAX_PUSH_ROUNDS) {
+            for (round in 0 until MAX_PUSH_ROUNDS) {
                 val result = pushOneRound(
                     userId = session.userId,
                     baseUrl = session.baseUrl,
                     accessToken = session.accessToken,
                     client = client,
                 )
+                if (!result.hadWork) break
                 pushed += result.accepted
                 conflicts += result.conflicts
                 rejected += result.rejected
-                if (!result.hadWork) return@repeat
             }
 
-            pulled = pullUntilCurrent(
+            val pulled = pullUntilCurrent(
                 userId = session.userId,
                 baseUrl = session.baseUrl,
                 accessToken = session.accessToken,
@@ -236,8 +237,7 @@ class TaskSyncCoordinator(
 
     private suspend fun handleAccepted(userId: String, result: PushChangeResult.Accepted) {
         database.withTransaction {
-            val task = dao.getTask(userId, result.entityId)
-            if (task != null) {
+            if (dao.getTask(userId, result.entityId) != null) {
                 dao.updateTaskServerVersion(userId, result.entityId, result.serverVersion)
             }
             dao.deleteOutbox(result.changeId)
