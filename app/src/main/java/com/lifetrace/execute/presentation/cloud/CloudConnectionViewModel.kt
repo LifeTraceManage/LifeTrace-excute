@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
- data class CloudConnectionUiState(
+data class CloudConnectionUiState(
     val connected: Boolean = false,
     val loading: Boolean = false,
     val baseUrl: String = "",
@@ -46,10 +46,11 @@ class CloudConnectionViewModel(application: Application) : AndroidViewModel(appl
             _state.value = _state.value.copy(loading = true, error = null)
             try {
                 val normalizedBaseUrl = client.normalizeBaseUrl(baseUrl)
-                val authCapabilities = client.authCapabilities(normalizedBaseUrl)
-                require(CloudContract.APP_ID in authCapabilities.supportedApps) {
-                    "当前 LifeTrace Cloud 尚未启用 ${CloudContract.APP_ID}"
-                }
+
+                // Probe the authentication service first. Some older Cloud builds hard-code
+                // supportedApps in this informational response, so /auth/login remains the
+                // authoritative decision for whether this AppId can authenticate.
+                client.authCapabilities(normalizedBaseUrl)
 
                 val auth = client.login(
                     baseUrl = normalizedBaseUrl,
@@ -59,6 +60,11 @@ class CloudConnectionViewModel(application: Application) : AndroidViewModel(appl
                     deviceName = identityStore.deviceName(),
                     clientVersion = BuildConfig.VERSION_NAME,
                 )
+
+                val missingScopes = CloudContract.REQUESTED_SCOPES.toSet() - auth.scopes.toSet()
+                require(missingScopes.isEmpty()) {
+                    "Cloud 未授予 Execute 必需权限：${missingScopes.sorted().joinToString()}"
+                }
 
                 val syncCapabilities = client.syncCapabilities(normalizedBaseUrl)
                 require(syncCapabilities.protocolVersion == CloudContract.PROTOCOL_VERSION) {
