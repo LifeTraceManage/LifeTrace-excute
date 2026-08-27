@@ -26,8 +26,8 @@ interface LifeTraceExecuteDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertOutbox(change: SyncOutboxEntity)
 
-    @Query("SELECT * FROM sync_outbox WHERE userId = :userId ORDER BY createdAt, changeId LIMIT :limit")
-    suspend fun pendingOutbox(userId: String, limit: Int): List<SyncOutboxEntity>
+    @Query("SELECT * FROM sync_outbox WHERE userId = :userId AND entityType = :entityType ORDER BY createdAt, changeId LIMIT :limit")
+    suspend fun pendingOutbox(userId: String, entityType: String, limit: Int): List<SyncOutboxEntity>
 
     @Query("SELECT COUNT(*) FROM sync_outbox WHERE userId = :userId")
     fun observePendingOutboxCount(userId: String): Flow<Int>
@@ -43,8 +43,8 @@ interface LifeTraceExecuteDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSyncState(state: SyncStateEntity)
 
-    @Query("SELECT * FROM sync_state WHERE userId = :userId LIMIT 1")
-    suspend fun getSyncState(userId: String): SyncStateEntity?
+    @Query("SELECT * FROM sync_state WHERE userId = :userId AND scopeKey = :scopeKey LIMIT 1")
+    suspend fun getSyncState(userId: String, scopeKey: String): SyncStateEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertConflict(conflict: SyncConflictEntity)
