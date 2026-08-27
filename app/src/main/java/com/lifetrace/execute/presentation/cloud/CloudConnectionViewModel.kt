@@ -10,6 +10,7 @@ import com.lifetrace.execute.core.cloud.DeviceIdentityStore
 import com.lifetrace.execute.core.cloud.LifeTraceCloudClient
 import com.lifetrace.execute.core.cloud.SecureSessionStore
 import com.lifetrace.execute.core.cloud.StoredCloudSession
+import com.lifetrace.execute.data.sync.TaskSyncCoordinator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,12 +19,14 @@ import kotlinx.coroutines.launch
 data class CloudConnectionUiState(
     val connected: Boolean = false,
     val loading: Boolean = false,
+    val syncing: Boolean = false,
     val baseUrl: String = "",
     val email: String = "",
     val displayName: String? = null,
     val scopes: List<String> = emptyList(),
     val protocolVersion: Int? = null,
     val schemaVersion: Int? = null,
+    val lastSyncMessage: String? = null,
     val error: String? = null,
 )
 
@@ -31,6 +34,7 @@ class CloudConnectionViewModel(application: Application) : AndroidViewModel(appl
     private val client = LifeTraceCloudClient()
     private val sessionStore = SecureSessionStore(application)
     private val identityStore = DeviceIdentityStore(application)
+    private val taskSyncCoordinator = TaskSyncCoordinator(application)
 
     private val _state = MutableStateFlow(sessionStore.load().toUiState())
     val state: StateFlow<CloudConnectionUiState> = _state.asStateFlow()
@@ -99,8 +103,34 @@ class CloudConnectionViewModel(application: Application) : AndroidViewModel(appl
         }
     }
 
+    fun syncTasks() {
+        if (!_state.value.connected || _state.value.syncing) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(syncing = true, error = null, lastSyncMessage = null)
+            try {
+                val summary = taskSyncCoordinator.syncNow()
+                _state.value = _state.value.copy(
+                    syncing = false,
+                    lastSyncMessage = buildString {
+                        append("任务同步完成")
+                        append(" · Snapshot ${summary.snapshotItems}")
+                        append(" · Push ${summary.pushed}")
+                        append(" · Pull ${summary.pulled}")
+                        if (summary.conflicts > 0) append(" · 冲突 ${summary.conflicts}")
+                        if (summary.rejected > 0) append(" · 拒绝 ${summary.rejected}")
+                    },
+                )
+            } catch (error: Throwable) {
+                _state.value = _state.value.copy(
+                    syncing = false,
+                    error = error.toUserMessage(),
+                )
+            }
+        }
+    }
+
     fun disconnect() {
-        if (_state.value.loading) return
+        if (_state.value.loading || _state.value.syncing) return
         val stored = sessionStore.load()
         viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null)
