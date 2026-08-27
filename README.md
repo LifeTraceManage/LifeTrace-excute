@@ -7,11 +7,14 @@ LifeTrace Execute 是 LifeTrace 的独立执行中心客户端，面向日常任
 - **浏览器高保真预览**：当前 UI 设计与交互评审的主基线，零依赖，可直接打开。
 - **Android Jetpack Compose**：最终 Android 客户端实现基线，后续按浏览器预览同步高保真视觉与交互。
 
+正式 Android 客户端采用 **Local-first + LifeTrace Cloud Sync**，不会新建第二套云端。云端直接复用 `zhouxingxing1279/LifeTrace` 中的 Rust + Axum + PostgreSQL Cloud、Auth v1 与 Sync v1。
+
 > 设计原则：新增或重构功能时，不删除已经确认的既有功能入口；允许调整入口位置，但必须保留功能能力。
 
 ## 文档
 
 - [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)：长期需求台账，后续所有新增/变更需求首先记录在这里。
+- [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md)：**完整项目执行计划、LifeTrace Cloud 接入方案与分阶段验收标准。**
 - [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)：当前完成度与下一阶段计划。
 - [`docs/UI_SPEC.md`](docs/UI_SPEC.md)：界面与组件规范。
 
@@ -174,20 +177,53 @@ app/
 - minSdk 26
 - targetSdk 35
 
-当前 Compose 端已经具备主要页面、导航、公共组件和 Mock Data，但视觉与功能版本仍落后于 `web-preview`。本轮“重要日期”和“番茄时钟”暂时只在浏览器原型完成，待前端评审确认后再同步 Android。
+当前 Compose 端已经具备主要页面、导航、公共组件和 Mock Data，但视觉与功能版本仍落后于 `web-preview`。
+
+正式实现按 [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md) 推进，核心链路为：
+
+```text
+Compose UI
+→ Domain / Repository
+→ Room / SQLite
+→ sync_outbox
+→ LifeTrace Cloud Auth + Sync v1
+→ PostgreSQL
+→ 其他 LifeTrace 客户端
+```
+
+## LifeTrace Cloud 对接
+
+主云端仓库：`zhouxingxing1279/LifeTrace`
+
+已确认可直接复用：
+
+- 原生客户端登录 `/api/v1/auth/login`
+- access / refresh token
+- Device / Session
+- `/api/v1/sync/capabilities`
+- `/api/v1/sync/push`
+- `/api/v1/sync/pull`
+- `/api/v1/sync/snapshot`
+- changeId 幂等
+- server cursor
+- optimistic conflict
+- tombstone 删除传播
+- execution task / project / calendar / memo / reminder 等双向同步实体
+- 文件元数据与 S3 兼容对象存储
+
+Execute 1.0 还需要在 LifeTrace 主仓库补齐 execution 域强类型 DTO，并新增 `execution.important_date` 与 `execution.focus_session`。
 
 ## 当前开发阶段
 
-当前工作顺序：
+当前执行顺序以 `docs/EXECUTION_PLAN.md` 为准：
 
-1. 所有新需求先登记到 `docs/REQUIREMENTS.md`。
-2. 在浏览器原型完成高保真视觉与交互。
-3. 评审确认后同步到 Jetpack Compose。
-4. 再补正式数据模型、后台能力和 LifeTrace Cloud 同步。
-
-本轮下一步重点：
-
-- 评审重要日期管理体验；
-- 评审任务页番茄钟的信息密度与操作方式；
-- 继续实现任务详情页和项目详情页；
-- 最终同步到 Android Compose。
+1. 收敛浏览器高保真交互；
+2. 冻结 Execute 1.0 字段级领域模型；
+3. 在 LifeTrace 主仓库加固 execution Cloud contracts；
+4. Android 补齐可重复构建、本地数据库和 Repository；
+5. 接入 Cloud Auth；
+6. 实现 Local-first Outbox + Push/Pull/Snapshot/Conflict；
+7. 先以 Task 完成第一条双设备纵向同步链路；
+8. 再扩展 Project / Calendar / Collection / Review / Profile；
+9. 落地重要日期农历和番茄后台计时；
+10. 完成 Release Gate 后发布。
