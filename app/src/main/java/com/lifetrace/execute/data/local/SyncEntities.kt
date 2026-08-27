@@ -24,6 +24,7 @@ data class SyncOutboxEntity(
     val atomicGroupId: String?,
     val dependenciesJson: String,
     val attemptCount: Int = 0,
+    val blocked: Boolean = false,
     val lastErrorCode: String? = null,
     val lastErrorMessage: String? = null,
     val createdAt: String,
