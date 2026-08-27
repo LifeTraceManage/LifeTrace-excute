@@ -1,6 +1,6 @@
 # LifeTrace Execute
 
-LifeTrace Execute 是 LifeTrace 的独立 Android 执行中心客户端。当前仓库从高保真 UI 原型开始，直接使用 **Jetpack Compose + Material 3** 实现，设计稿与最终 Android 代码保持同一套组件体系。
+LifeTrace Execute 是 LifeTrace 的独立 Android 执行中心客户端。当前仓库从高保真 UI 原型开始，使用 **Jetpack Compose + Material 3** 实现，同时提供零依赖的浏览器高保真预览，方便在没有 Android SDK 的情况下快速评审 UI。
 
 ## 当前界面
 
@@ -56,7 +56,54 @@ LifeTrace Execute 是 LifeTrace 的独立 Android 执行中心客户端。当前
 - 同步与数据
 - 通用设置
 
-## 技术栈
+## 浏览器高保真预览
+
+浏览器预览位于：
+
+```text
+web-preview/
+├── index.html
+├── styles.css
+└── app.js
+```
+
+它不依赖 Node.js、npm、Android SDK 或任何外部 CDN。
+
+### 最快查看方式
+
+直接双击：
+
+```text
+web-preview/index.html
+```
+
+即可在浏览器中打开。
+
+### 推荐方式：本地 HTTP 服务
+
+在仓库根目录执行：
+
+```bash
+python -m http.server 8080
+```
+
+然后浏览器打开：
+
+```text
+http://localhost:8080/web-preview/
+```
+
+浏览器版按 **360 × 800** Android 基准尺寸设计，并支持：
+
+- 5 个底部导航切换
+- 右上角头像进入“我的”
+- 今天页进入“今日复盘”
+- 任务搜索和筛选
+- 任务完成状态切换
+- 项目进度、日历、收集箱等高保真展示
+- 桌面浏览器手机壳预览 / 窄屏自动全屏
+
+## Android 技术栈
 
 - Kotlin
 - Jetpack Compose
@@ -64,7 +111,7 @@ LifeTrace Execute 是 LifeTrace 的独立 Android 执行中心客户端。当前
 - Navigation Compose
 - Android minSdk 26 / targetSdk 35
 
-## 运行
+## Android 运行
 
 使用近期版本 Android Studio 打开仓库，等待 Gradle Sync 完成后运行 `app`。
 

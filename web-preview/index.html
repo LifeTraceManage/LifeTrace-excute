@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#FAFBFF" />
+  <title>LifeTrace Execute · Browser Preview</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="preview-stage">
+    <section class="preview-copy" aria-label="预览说明">
+      <div class="brand-lockup">
+        <div class="brand-mark">L</div>
+        <div>
+          <strong>LifeTrace Execute</strong>
+          <span>Browser High-Fidelity Preview</span>
+        </div>
+      </div>
+      <p>零依赖静态预览 · 360 × 800 Android 基准 · 与 Compose 端共享信息架构</p>
+      <div class="preview-hints">
+        <span>底部导航可切换</span>
+        <span>头像进入“我的”</span>
+        <span>今天页进入“复盘”</span>
+      </div>
+    </section>
+
+    <section class="device-wrap" aria-label="LifeTrace Execute 手机预览">
+      <div class="device" id="device">
+        <div class="status-bar" aria-hidden="true">
+          <span>15:58</span>
+          <div class="status-icons">
+            <span class="signal"></span>
+            <span class="wifi"></span>
+            <span class="battery"><i></i></span>
+          </div>
+        </div>
+        <div id="app" class="app-content"></div>
+        <nav id="bottom-nav" class="bottom-nav" aria-label="主导航"></nav>
+        <div class="gesture-bar" aria-hidden="true"><span></span></div>
+      </div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
