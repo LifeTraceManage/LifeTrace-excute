@@ -29,9 +29,13 @@ data class SyncOutboxEntity(
     val createdAt: String,
 )
 
-@Entity(tableName = "sync_state")
+@Entity(
+    tableName = "sync_state",
+    primaryKeys = ["userId", "scopeKey"],
+)
 data class SyncStateEntity(
-    @PrimaryKey val userId: String,
+    val userId: String,
+    val scopeKey: String,
     val cursor: String?,
     val lastSyncAt: String?,
     val snapshotId: String?,
