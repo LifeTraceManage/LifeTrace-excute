@@ -11,11 +11,14 @@ LifeTrace Execute 是 LifeTrace 的独立 Android 执行中心客户端，负责
 - `web-preview/`：UI 设计、交互验证和快速评审基线。
 - `app/`：最终 Android Compose 客户端。
 
-当前工作方式：**需求先进入 `docs/REQUIREMENTS.md`，再完成浏览器高保真前端，确认后同步到 Android Compose。**
+正式 Android 采用 **Local-first + LifeTrace Cloud Sync**：本地 Room/SQLite 保证离线执行，云端直接复用 `zhouxingxing1279/LifeTrace` 中已有的 Rust + Axum + PostgreSQL Cloud、Auth v1 与 Sync v1，不建设第二套 Execute 后端。
+
+当前工作方式：**需求先进入 `docs/REQUIREMENTS.md`，浏览器确认交互；工程实施和验收顺序统一以 `docs/EXECUTION_PLAN.md` 为准。**
 
 ## 2. 文档基线
 
 - `docs/REQUIREMENTS.md`：长期需求台账，所有新增/变更需求的 Source of Truth。
+- `docs/EXECUTION_PLAN.md`：完整项目执行计划、云端接入、测试策略和 Release Gate。
 - `docs/UI_SPEC.md`：视觉、导航和组件规范。
 - `docs/PROJECT_STATUS.md`：项目当前完成度与下一阶段计划。
 
@@ -180,7 +183,7 @@ LifeTrace Execute 是 LifeTrace 的独立 Android 执行中心客户端，负责
 
 ## 5. Android Compose 进度
 
-状态：**基础工程和核心页面已建立，但视觉和功能版本落后于浏览器高保真预览。**
+状态：**基础工程和核心页面已建立，但仍处于 UI / Mock 阶段，尚未接入正式本地数据层和 LifeTrace Cloud。**
 
 已实现：
 
@@ -193,18 +196,88 @@ LifeTrace Execute 是 LifeTrace 的独立 Android 执行中心客户端，负责
 - Mock Data
 - Compose Preview
 
-待同步：
+待完成：
 
-- 浏览器新版视觉体系
+- Gradle Wrapper 与可重复 Android 构建
+- 浏览器新版视觉体系同步
 - `REQ-CAL-001` 重要日期
 - `REQ-TASK-001` 番茄时钟
 - 二级详情页
-- 状态管理架构
-- 数据层
-- LifeTrace Cloud API / 同步协议
-- 本地缓存与离线策略
+- ViewModel / Domain / Repository 分层
+- Room / SQLite 本地数据库
+- `sync_outbox / sync_state / sync_conflicts`
+- LifeTrace Cloud Auth client
+- LifeTrace Sync v1 client
+- 后台同步与 WorkManager
+- 离线、冲突、snapshot、tombstone 处理
 
-## 6. 当前设计方向
+## 6. LifeTrace Cloud 对齐状态
+
+已核对主仓库 `zhouxingxing1279/LifeTrace`。
+
+### 已存在，可直接复用
+
+Cloud 技术栈：
+
+- Rust
+- Axum
+- PostgreSQL
+- Docker 部署
+- 共享 `lifetrace-contracts`
+- OpenAPI / JSON Schema
+
+认证：
+
+- `/api/v1/auth/login`
+- access token / refresh token
+- Session
+- Device
+
+同步：
+
+- `/api/v1/sync/capabilities`
+- `/api/v1/sync/push`
+- `/api/v1/sync/pull`
+- `/api/v1/sync/snapshot`
+- changeId 幂等
+- server cursor
+- baseServerVersion
+- optimistic conflict
+- tombstone
+
+Cloud 已注册执行域双向同步实体：
+
+```text
+execution.goal
+execution.weekly_review
+execution.project
+execution.recurrence_rule
+execution.task
+execution.task_dependency
+execution.task_occurrence
+execution.waiting_item
+execution.calendar_event
+execution.calendar_occurrence
+execution.memo
+execution.memo_tag
+execution.memo_tag_relation
+execution.reminder
+execution.completion_result
+execution.entity_link
+```
+
+### 1.0 前需要补齐
+
+- execution 域当前 RegisteredJson 契约升级为强类型 DTO / Schema 校验；
+- 新增 `execution.important_date`；
+- 新增 `execution.focus_session`；
+- Android 端 Auth / Sync client；
+- Android Local-first 数据层与 Outbox；
+- 双设备 E2E。
+
+重要日期的农历原始字段必须作为 Source of Truth；番茄计时偏好优先复用 `user.preference`，完成的专注记录同步为 `execution.focus_session`。
+
+## 7. 当前设计方向
 
 - 白色 / 极浅灰基础背景
 - 蓝色为主强调色
@@ -217,16 +290,19 @@ LifeTrace Execute 是 LifeTrace 的独立 Android 执行中心客户端，负责
 - 正式 SVG / Material 风格图标
 - Android compact viewport 基准约 360 × 800 dp
 
-## 7. 下一阶段任务
+## 8. 下一阶段任务
 
-优先顺序：
+执行顺序以 [`EXECUTION_PLAN.md`](./EXECUTION_PLAN.md) 为唯一工程基线：
 
-1. 评审本轮“重要日期 + 番茄时钟”浏览器前端。
-2. 根据反馈继续调整交互和视觉。
-3. 实现任务详情页。
-4. 实现项目详情页。
-5. 固化公共组件规范。
-6. 将确认后的浏览器 UI 同步到 Compose。
-7. 为重要日期实现可靠农历换算和数据模型。
-8. 为番茄钟实现 Android 后台计时与通知。
-9. 再开始接 LifeTrace Cloud 数据。
+1. 评审并收敛现有浏览器高保真交互。
+2. 冻结 Execute 1.0 字段级领域模型。
+3. 在 LifeTrace 主仓库加固 `execution.*` contract，新增 ImportantDate / FocusSession。
+4. 补齐 Android Gradle Wrapper，保证项目可重复构建。
+5. 建立 Room + Repository + Outbox / State / Conflict 本地层。
+6. 接入 LifeTrace Cloud Auth。
+7. 实现 capabilities / snapshot / pull / push Sync Coordinator。
+8. **先以 Task 做第一条纵向端到端链路**：本地新增 → Cloud → 第二设备同步。
+9. 扩展到 Project / Calendar / Collection / Review / Profile。
+10. 实现可靠农历换算、后台番茄计时和通知。
+11. 执行离线、重复提交、冲突、删除、snapshot、双设备回归。
+12. 所有 Release Gate 通过后发布 1.0。
