@@ -3,41 +3,50 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#FAFBFF" />
-  <title>LifeTrace Execute · Browser Preview</title>
+  <meta name="theme-color" content="#F7F8FC" />
+  <title>LifeTrace Execute · High-Fidelity Browser Preview</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main class="preview-stage">
-    <section class="preview-copy" aria-label="预览说明">
+    <aside class="preview-copy" aria-label="预览说明">
       <div class="brand-lockup">
         <div class="brand-mark">L</div>
         <div>
           <strong>LifeTrace Execute</strong>
-          <span>Browser High-Fidelity Preview</span>
+          <span>Android UI · Browser Prototype</span>
         </div>
       </div>
-      <p>零依赖静态预览 · 360 × 800 Android 基准 · 与 Compose 端共享信息架构</p>
+      <h1>先在浏览器里把 Android 体验打磨到位。</h1>
+      <p>零依赖高保真原型，保持 360 × 800 dp 的移动端信息密度。所有一级入口都保留，可直接点击检查导航、任务状态、项目进度、日历、收集与复盘流程。</p>
       <div class="preview-hints">
-        <span>底部导航可切换</span>
+        <span>5 个底部一级入口</span>
         <span>头像进入“我的”</span>
-        <span>今天页进入“复盘”</span>
+        <span>今日复盘独立流程</span>
+        <span>无需 npm / Android SDK</span>
       </div>
-    </section>
+      <div class="preview-note">
+        <span class="preview-note-dot"></span>
+        当前版本为视觉与交互基线，后续再同步到 Compose。
+      </div>
+    </aside>
 
     <section class="device-wrap" aria-label="LifeTrace Execute 手机预览">
+      <div class="device-shadow"></div>
       <div class="device" id="device">
         <div class="status-bar" aria-hidden="true">
-          <span>15:58</span>
+          <span class="status-time">15:58</span>
           <div class="status-icons">
-            <span class="signal"></span>
-            <span class="wifi"></span>
+            <span class="signal-bars"><i></i><i></i><i></i><i></i></span>
+            <span class="wifi-mark"></span>
             <span class="battery"><i></i></span>
           </div>
         </div>
         <div id="app" class="app-content"></div>
         <nav id="bottom-nav" class="bottom-nav" aria-label="主导航"></nav>
         <div class="gesture-bar" aria-hidden="true"><span></span></div>
+        <div id="toast" class="toast" role="status" aria-live="polite"></div>
+        <div id="modal-root"></div>
       </div>
     </section>
   </main>
