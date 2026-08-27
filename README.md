@@ -9,6 +9,12 @@ LifeTrace Execute 是 LifeTrace 的独立执行中心客户端，面向日常任
 
 > 设计原则：新增或重构功能时，不删除已经确认的既有功能入口；允许调整入口位置，但必须保留功能能力。
 
+## 文档
+
+- [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)：长期需求台账，后续所有新增/变更需求首先记录在这里。
+- [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)：当前完成度与下一阶段计划。
+- [`docs/UI_SPEC.md`](docs/UI_SPEC.md)：界面与组件规范。
+
 ## 信息架构
 
 底部一级导航固定为 5 个入口：
@@ -21,6 +27,11 @@ LifeTrace Execute 是 LifeTrace 的独立执行中心客户端，面向日常任
 
 “我的”通过主页面右上角头像进入，不占用底部导航；“今日复盘”保留在“今天”页面中，并拥有独立复盘页。
 
+新增功能仍嵌入现有信息架构：
+
+- **番茄时钟**：位于任务页，不新增一级导航。
+- **重要日期**：位于日历页，并提供独立管理页。
+
 ## 当前高保真预览
 
 目录：
@@ -29,7 +40,9 @@ LifeTrace Execute 是 LifeTrace 的独立执行中心客户端，面向日常任
 web-preview/
 ├── index.html
 ├── styles.css
-└── app.js
+├── app.js
+├── features-v3.css
+└── features-v3.js
 ```
 
 无需 Node.js、npm、Android SDK 或外部 CDN。
@@ -54,7 +67,7 @@ python -m http.server 8080
 http://localhost:8080/web-preview/
 ```
 
-桌面端以 360 × 800 Android 基准尺寸显示手机模拟框；窄屏/手机浏览器自动切换为全屏 App 预览。
+桌面端以约 360 × 800 Android compact 信息密度显示手机模拟框；窄屏/手机浏览器自动切换为全屏 App 预览。
 
 ## 已实现页面与交互
 
@@ -75,6 +88,14 @@ http://localhost:8080/web-preview/
 - 任务完成状态切换
 - 新建任务 Bottom Sheet
 - 可输入并新增 Mock 任务
+- **番茄时钟**
+  - 25 / 5 经典模式
+  - 50 / 10 深度专注模式
+  - 开始 / 暂停 / 重置
+  - 真实前端倒计时
+  - 关联任务
+  - 今日番茄轮次
+  - 页面切换后计时状态保持
 
 ### 项目
 
@@ -88,10 +109,20 @@ http://localhost:8080/web-preview/
 ### 日历
 
 - 月视图
-- 事件日期标记
+- 普通事件日期标记
 - 日期选择
 - 当日日程
 - 不同日程类型的状态区分
+- **重要日期**
+  - 生日 / 纪念日 / 里程碑 / 其他
+  - 仅一次 / 每年重复
+  - 公历 / 农历
+  - 农历年、月、日与闰月输入
+  - 新增 / 编辑 / 删除
+  - 重要日期独立管理页
+  - 公历重要日期月历标记
+
+> 浏览器原型目前只负责农历的完整输入与交互设计，不自行使用简化算法进行农历换算。正式 Android/数据层需要使用可靠的历法实现。
 
 ### 收集
 
@@ -143,16 +174,20 @@ app/
 - minSdk 26
 - targetSdk 35
 
-当前 Compose 端已经具备主要页面、导航、公共组件和 Mock Data，但视觉精度仍需继续对齐 `web-preview`。
+当前 Compose 端已经具备主要页面、导航、公共组件和 Mock Data，但视觉与功能版本仍落后于 `web-preview`。本轮“重要日期”和“番茄时钟”暂时只在浏览器原型完成，待前端评审确认后再同步 Android。
 
 ## 当前开发阶段
 
-当前阶段重点不是继续扩张功能，而是：
+当前工作顺序：
 
-1. 以浏览器预览为视觉基准继续提高 UI 还原度。
-2. 完善任务详情、项目详情等二级页面。
-3. 固化颜色、字号、间距、圆角、阴影、状态色等设计 Token。
-4. 将高保真结果逐步同步回 Jetpack Compose。
-5. UI 稳定后再接入 LifeTrace Cloud 数据与同步协议。
+1. 所有新需求先登记到 `docs/REQUIREMENTS.md`。
+2. 在浏览器原型完成高保真视觉与交互。
+3. 评审确认后同步到 Jetpack Compose。
+4. 再补正式数据模型、后台能力和 LifeTrace Cloud 同步。
 
-详细进度见 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)，界面规范见 [`docs/UI_SPEC.md`](docs/UI_SPEC.md)。
+本轮下一步重点：
+
+- 评审重要日期管理体验；
+- 评审任务页番茄钟的信息密度与操作方式；
+- 继续实现任务详情页和项目详情页；
+- 最终同步到 Android Compose。
