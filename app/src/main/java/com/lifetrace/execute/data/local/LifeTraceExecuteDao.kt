@@ -26,19 +26,76 @@ interface LifeTraceExecuteDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertOutbox(change: SyncOutboxEntity)
 
-    @Query("SELECT * FROM sync_outbox WHERE userId = :userId AND entityType = :entityType ORDER BY createdAt, changeId LIMIT :limit")
-    suspend fun pendingOutbox(userId: String, entityType: String, limit: Int): List<SyncOutboxEntity>
+    @Query(
+        """
+        SELECT o.* FROM sync_outbox o
+        WHERE o.userId = :userId
+          AND o.entityType = :entityType
+          AND o.blocked = 0
+          AND NOT EXISTS (
+            SELECT 1 FROM sync_outbox older
+            WHERE older.userId = o.userId
+              AND older.entityType = o.entityType
+              AND older.entityId = o.entityId
+              AND (
+                older.createdAt < o.createdAt OR
+                (older.createdAt = o.createdAt AND older.changeId < o.changeId)
+              )
+          )
+        ORDER BY o.createdAt, o.changeId
+        LIMIT :limit
+        """
+    )
+    suspend fun pendingOutboxHeads(userId: String, entityType: String, limit: Int): List<SyncOutboxEntity>
 
-    @Query("SELECT COUNT(*) FROM sync_outbox WHERE userId = :userId")
+    @Query(
+        "SELECT * FROM sync_outbox WHERE userId = :userId AND entityType = :entityType AND entityId = :entityId ORDER BY createdAt, changeId LIMIT 1"
+    )
+    suspend fun firstOutboxForEntity(userId: String, entityType: String, entityId: String): SyncOutboxEntity?
+
+    @Query("SELECT COUNT(*) FROM sync_outbox WHERE userId = :userId AND blocked = 0")
     fun observePendingOutboxCount(userId: String): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM sync_outbox WHERE userId = :userId AND blocked = 1")
+    fun observeBlockedOutboxCount(userId: String): Flow<Int>
 
     @Query("DELETE FROM sync_outbox WHERE changeId = :changeId")
     suspend fun deleteOutbox(changeId: String)
 
     @Query(
-        "UPDATE sync_outbox SET attemptCount = attemptCount + 1, lastErrorCode = :code, lastErrorMessage = :message WHERE changeId = :changeId"
+        "UPDATE sync_outbox SET attemptCount = attemptCount + 1, lastErrorCode = NULL, lastErrorMessage = NULL WHERE changeId = :changeId"
     )
-    suspend fun markOutboxFailed(changeId: String, code: String?, message: String?)
+    suspend fun markOutboxAttempted(changeId: String)
+
+    @Query(
+        "UPDATE sync_outbox SET lastErrorCode = :code, lastErrorMessage = :message WHERE changeId = :changeId"
+    )
+    suspend fun markOutboxRetryableFailure(changeId: String, code: String?, message: String?)
+
+    @Query(
+        "UPDATE sync_outbox SET blocked = 1, lastErrorCode = :code, lastErrorMessage = :message WHERE changeId = :changeId"
+    )
+    suspend fun blockOutbox(changeId: String, code: String?, message: String?)
+
+    @Query(
+        "UPDATE sync_outbox SET blocked = 1, lastErrorCode = :code, lastErrorMessage = :message WHERE userId = :userId AND entityType = :entityType AND entityId = :entityId"
+    )
+    suspend fun blockOutboxForEntity(
+        userId: String,
+        entityType: String,
+        entityId: String,
+        code: String?,
+        message: String?,
+    )
+
+    @Query(
+        "UPDATE sync_outbox SET baseServerVersion = :baseServerVersion, payloadJson = :payloadJson WHERE changeId = :changeId AND attemptCount = 0"
+    )
+    suspend fun rebaseUnattemptedOutbox(
+        changeId: String,
+        baseServerVersion: String,
+        payloadJson: String?,
+    )
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSyncState(state: SyncStateEntity)
