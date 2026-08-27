@@ -22,6 +22,7 @@ data class SyncOutboxEntity(
     val clientModifiedAt: String,
     val payloadJson: String?,
     val atomicGroupId: String?,
+    val dependenciesJson: String,
     val attemptCount: Int = 0,
     val lastErrorCode: String? = null,
     val lastErrorMessage: String? = null,
