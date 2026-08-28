@@ -56,6 +56,7 @@ import com.lifetrace.execute.domain.task.ExecutionTaskPriority
 import com.lifetrace.execute.domain.task.ExecutionTaskStatus
 import com.lifetrace.execute.presentation.tasks.TasksUiState
 import com.lifetrace.execute.presentation.tasks.TasksViewModel
+import com.lifetrace.execute.ui.components.DateTimePickerField
 import com.lifetrace.execute.ui.components.ScreenHeader
 import com.lifetrace.execute.ui.components.SectionTitle
 import com.lifetrace.execute.ui.theme.LifeBlue
@@ -100,8 +101,16 @@ fun TasksContent(
     state: TasksUiState,
     onProfile: () -> Unit,
     onCloudConnection: () -> Unit,
-    onCreateTask: (String, ExecutionTaskPriority) -> Unit,
-    onUpdateTask: (ExecutionTask, String, String?, ExecutionTaskStatus, ExecutionTaskPriority) -> Unit,
+    onCreateTask: (String, String?, ExecutionTaskPriority, String?, String?) -> Unit,
+    onUpdateTask: (
+        ExecutionTask,
+        String,
+        String?,
+        ExecutionTaskStatus,
+        ExecutionTaskPriority,
+        String?,
+        String?,
+    ) -> Unit,
     onToggleTask: (ExecutionTask) -> Unit,
     onDeleteTask: (ExecutionTask) -> Unit,
     onSync: () -> Unit,
@@ -276,8 +285,8 @@ fun TasksContent(
     if (showNewTask) {
         NewTaskSheet(
             onDismiss = { showNewTask = false },
-            onCreate = { title, priority ->
-                onCreateTask(title, priority)
+            onCreate = { title, description, priority, dueAt, scheduledAt ->
+                onCreateTask(title, description, priority, dueAt, scheduledAt)
                 showNewTask = false
             },
         )
@@ -287,8 +296,8 @@ fun TasksContent(
         EditTaskSheet(
             task = task,
             onDismiss = { editingTask = null },
-            onSave = { title, description, status, priority ->
-                onUpdateTask(task, title, description, status, priority)
+            onSave = { title, description, status, priority, dueAt, scheduledAt ->
+                onUpdateTask(task, title, description, status, priority, dueAt, scheduledAt)
                 editingTask = null
             },
         )
@@ -419,7 +428,7 @@ private fun ExecutionTaskRow(
                     )
                     task.dueAt?.let { dueAt ->
                         Text(
-                            formatDateTime(dueAt),
+                            "截止 ${formatDateTime(dueAt)}",
                             color = LifeMuted,
                             style = MaterialTheme.typography.labelMedium,
                         )
@@ -440,10 +449,13 @@ private fun ExecutionTaskRow(
 @Composable
 private fun NewTaskSheet(
     onDismiss: () -> Unit,
-    onCreate: (String, ExecutionTaskPriority) -> Unit,
+    onCreate: (String, String?, ExecutionTaskPriority, String?, String?) -> Unit,
 ) {
     var title by rememberSaveable { mutableStateOf("") }
+    var description by rememberSaveable { mutableStateOf("") }
     var priority by rememberSaveable { mutableStateOf(ExecutionTaskPriority.NORMAL) }
+    var dueAt by rememberSaveable { mutableStateOf<String?>(null) }
+    var scheduledAt by rememberSaveable { mutableStateOf<String?>(null) }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -465,12 +477,38 @@ private fun NewTaskSheet(
                 label = { Text("任务标题") },
                 singleLine = true,
             )
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("描述") },
+                minLines = 2,
+                maxLines = 4,
+            )
             PrioritySelector(
                 selected = priority,
                 onSelected = { priority = it },
             )
+            DateTimePickerField(
+                label = "安排时间",
+                value = scheduledAt,
+                onValueChange = { scheduledAt = it },
+            )
+            DateTimePickerField(
+                label = "截止时间",
+                value = dueAt,
+                onValueChange = { dueAt = it },
+            )
             Button(
-                onClick = { onCreate(title, priority) },
+                onClick = {
+                    onCreate(
+                        title.trim(),
+                        description.trim().takeIf { it.isNotEmpty() },
+                        priority,
+                        dueAt,
+                        scheduledAt,
+                    )
+                },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = title.isNotBlank(),
             ) {
@@ -485,12 +523,21 @@ private fun NewTaskSheet(
 private fun EditTaskSheet(
     task: ExecutionTask,
     onDismiss: () -> Unit,
-    onSave: (String, String?, ExecutionTaskStatus, ExecutionTaskPriority) -> Unit,
+    onSave: (
+        String,
+        String?,
+        ExecutionTaskStatus,
+        ExecutionTaskPriority,
+        String?,
+        String?,
+    ) -> Unit,
 ) {
     var title by remember(task.id) { mutableStateOf(task.title) }
     var description by remember(task.id) { mutableStateOf(task.description.orEmpty()) }
     var status by remember(task.id) { mutableStateOf(task.status) }
     var priority by remember(task.id) { mutableStateOf(task.priority) }
+    var dueAt by remember(task.id) { mutableStateOf(task.dueAt) }
+    var scheduledAt by remember(task.id) { mutableStateOf(task.scheduledAt) }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -528,6 +575,16 @@ private fun EditTaskSheet(
                 selected = priority,
                 onSelected = { priority = it },
             )
+            DateTimePickerField(
+                label = "安排时间",
+                value = scheduledAt,
+                onValueChange = { scheduledAt = it },
+            )
+            DateTimePickerField(
+                label = "截止时间",
+                value = dueAt,
+                onValueChange = { dueAt = it },
+            )
             Button(
                 onClick = {
                     onSave(
@@ -535,6 +592,8 @@ private fun EditTaskSheet(
                         description.trim().takeIf { it.isNotEmpty() },
                         status,
                         priority,
+                        dueAt,
+                        scheduledAt,
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
