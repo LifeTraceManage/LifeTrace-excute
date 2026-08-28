@@ -15,6 +15,12 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+
+        javaCompileOptions {
+            annotationProcessorOptions {
+                arguments["room.schemaLocation"] = "$projectDir/schemas"
+            }
+        }
     }
 
     buildTypes {
@@ -38,6 +44,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -67,4 +74,7 @@ dependencies {
 
 kapt {
     correctErrorTypes = true
+    arguments {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
 }
