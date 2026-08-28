@@ -63,6 +63,11 @@ interface LifeTraceExecuteDao {
     suspend fun deleteOutbox(changeId: String)
 
     @Query(
+        "DELETE FROM sync_outbox WHERE userId = :userId AND entityType = :entityType AND entityId = :entityId"
+    )
+    suspend fun deleteOutboxForEntity(userId: String, entityType: String, entityId: String)
+
+    @Query(
         "UPDATE sync_outbox SET attemptCount = attemptCount + 1, lastErrorCode = NULL, lastErrorMessage = NULL WHERE changeId = :changeId"
     )
     suspend fun markOutboxAttempted(changeId: String)
@@ -109,6 +114,14 @@ interface LifeTraceExecuteDao {
     @Query("SELECT * FROM sync_conflicts WHERE userId = :userId ORDER BY createdAt DESC")
     fun observeConflicts(userId: String): Flow<List<SyncConflictEntity>>
 
+    @Query("SELECT * FROM sync_conflicts WHERE conflictId = :conflictId LIMIT 1")
+    suspend fun getConflict(conflictId: String): SyncConflictEntity?
+
     @Query("DELETE FROM sync_conflicts WHERE conflictId = :conflictId")
     suspend fun deleteConflict(conflictId: String)
+
+    @Query(
+        "DELETE FROM sync_conflicts WHERE userId = :userId AND entityType = :entityType AND entityId = :entityId"
+    )
+    suspend fun deleteConflictsForEntity(userId: String, entityType: String, entityId: String)
 }
