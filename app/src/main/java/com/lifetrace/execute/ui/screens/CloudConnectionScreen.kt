@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -255,7 +256,7 @@ fun CloudConnectionScreen(
                             }
                         }
                         Text(
-                            "已通过 Auth capabilities 与 Sync capabilities 兼容性检查。",
+                            "已通过 Auth 登录与 Sync capabilities 兼容性检查。",
                             color = LifeMuted,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -275,10 +276,49 @@ fun CloudConnectionScreen(
             }
 
             item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = LifeBlueSoft),
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text("任务同步", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "当前第一条正式纵向链已覆盖 execution.task：Snapshot → Outbox Push → Cursor Pull → Conflict。",
+                            color = LifeMuted,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        state.lastSyncMessage?.let { message ->
+                            Text(message, color = LifeBlue, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Button(
+                            onClick = viewModel::syncTasks,
+                            enabled = !state.syncing && !state.loading,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            if (state.syncing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            } else {
+                                Icon(Icons.Outlined.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(Modifier.size(8.dp))
+                            Text(if (state.syncing) "正在同步任务…" else "立即同步任务")
+                        }
+                    }
+                }
+            }
+
+            item {
                 Spacer(Modifier.height(4.dp))
                 OutlinedButton(
                     onClick = viewModel::disconnect,
-                    enabled = !state.loading,
+                    enabled = !state.loading && !state.syncing,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (state.loading) {
