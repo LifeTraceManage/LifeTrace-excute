@@ -1,6 +1,6 @@
 # LifeTrace Execute 需求台账
 
-更新时间：2026-08-27
+更新时间：2026-08-28
 
 > 本文档是 LifeTrace Execute 的长期需求来源（Source of Truth）。后续新增、调整、取消需求都在这里维护，不以聊天记录代替产品需求文档。
 
@@ -33,6 +33,50 @@
 状态：**已确认**
 
 新增、重构、合并入口时，不得删除项目、收集、复盘、账号/设置等已经确认的能力。允许调整入口位置与视觉层级，但不能为了新增功能直接移除旧功能。
+
+### REQ-CLOUD-001 LifeTrace Cloud 统一账号与同步
+
+状态：**开发中**
+
+LifeTrace Execute 必须连接 `zhouxingxing1279/LifeTrace` 现有 Cloud，不创建第二套账号系统或第二套 Execute 云端。
+
+正式 Android 客户端要求：
+
+- 使用 LifeTrace 原生账号；
+- 使用独立稳定 AppId `lifetrace-execute-android`；
+- 使用 Auth v1 access / refresh token；
+- 设备有稳定 installation deviceId；
+- Token 使用 Android 安全存储；
+- 正式 Cloud 强制 HTTPS；
+- 使用 LifeTrace Sync v1；
+- 支持 snapshot / push / pull；
+- 支持 changeId 幂等；
+- 支持 baseServerVersion 乐观冲突；
+- 支持 tombstone 删除传播；
+- 支持新设备恢复；
+- 最终不同 LifeTrace 客户端看到同一份用户数据。
+
+### REQ-CLOUD-002 Local-first / 离线执行
+
+状态：**开发中**
+
+Android 不允许把网络请求作为主要业务写入的前置条件。
+
+业务写入要求：
+
+```text
+本地 Entity + Sync Outbox
+```
+
+必须在同一数据库事务提交。
+
+断网时：
+
+- 已同步数据仍可读取；
+- 任务等核心业务仍可修改；
+- 修改进入 Outbox；
+- 网络恢复后重试；
+- API 暂时失败不得导致本地任务丢失。
 
 ---
 
@@ -75,7 +119,7 @@
 建议数据模型至少包含：
 
 - `id`
-- `title`：日期名称
+- `title`
 - `type`：生日 / 纪念日 / 里程碑 / 其他
 - `calendarType`：solar / lunar
 - `repeatType`：once / yearly
@@ -104,6 +148,34 @@
 ---
 
 ## 4. 任务需求
+
+### REQ-TASK-CORE-001 Local-first 任务管理
+
+状态：**开发中**
+
+任务不能继续以 Mock Data 作为正式运行时数据源。
+
+1.0 任务基础能力至少包括：
+
+- 新建；
+- 查看；
+- 编辑；
+- 删除；
+- TODO / 进行中 / 等待 / 已完成；
+- 优先级；
+- 描述；
+- 项目归属；
+- 截止时间；
+- 安排时间；
+- 提醒；
+- 重复规则；
+- 搜索；
+- 筛选；
+- 离线写入；
+- LifeTrace Cloud 多端同步；
+- 冲突处理。
+
+当前已实现代码：Room 列表、新建、优先级、完成/恢复、删除、搜索、筛选、Outbox 与手动 Task Sync。其余字段和 UI 继续开发。
 
 ### REQ-TASK-001 番茄时钟
 
@@ -167,10 +239,20 @@
 | --- | --- |
 | REQ-BASE-001 一级导航 | 已确认 |
 | REQ-BASE-002 功能保护 | 已确认 |
+| REQ-CLOUD-001 Cloud 统一账号与同步 | 开发中 |
+| REQ-CLOUD-002 Local-first | 开发中 |
 | REQ-CAL-001 重要日期 | 前端已设计 / Android 待实现 |
+| REQ-TASK-CORE-001 任务管理 | 开发中 |
 | REQ-TASK-001 番茄时钟 | 前端已设计 / Android 待实现 |
 
 ## 6. 变更记录
+
+### 2026-08-28
+
+- 登记 `REQ-CLOUD-001`：LifeTrace Cloud 统一账号与 Sync v1。
+- 登记 `REQ-CLOUD-002`：Android Local-first / Room + Outbox。
+- 登记 `REQ-TASK-CORE-001`：正式任务管理与多端同步。
+- 记录 Task 运行时已经开始从 Mock 迁移到 Room / Repository。
 
 ### 2026-08-27
 
