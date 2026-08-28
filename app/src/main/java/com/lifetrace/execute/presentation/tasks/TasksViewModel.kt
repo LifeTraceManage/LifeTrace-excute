@@ -16,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 data class TasksUiState(
@@ -23,13 +24,24 @@ data class TasksUiState(
     val tasks: List<ExecutionTask> = emptyList(),
     val loading: Boolean = true,
     val syncing: Boolean = false,
+    val pendingSyncCount: Int = 0,
+    val blockedSyncCount: Int = 0,
+    val conflictCount: Int = 0,
     val message: String? = null,
     val error: String? = null,
+)
+
+private data class TaskObservation(
+    val tasks: List<ExecutionTask>,
+    val pendingSyncCount: Int,
+    val blockedSyncCount: Int,
+    val conflictCount: Int,
 )
 
 class TasksViewModel(application: Application) : AndroidViewModel(application) {
     private val appContext = application.applicationContext
     private val database = LifeTraceExecuteDatabase.get(application)
+    private val dao = database.dao()
     private val repository = TaskRepository(database)
     private val sessionStore = SecureSessionStore(application)
     private val deviceIdentityStore = DeviceIdentityStore(application)
@@ -68,10 +80,25 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
             error = null,
         )
         observeJob = viewModelScope.launch {
-            repository.observeTasks(userId).collect { tasks ->
+            combine(
+                repository.observeTasks(userId),
+                dao.observePendingOutboxCount(userId),
+                dao.observeBlockedOutboxCount(userId),
+                dao.observeConflicts(userId),
+            ) { tasks, pending, blocked, conflicts ->
+                TaskObservation(
+                    tasks = tasks,
+                    pendingSyncCount = pending,
+                    blockedSyncCount = blocked,
+                    conflictCount = conflicts.size,
+                )
+            }.collect { observation ->
                 _state.value = _state.value.copy(
                     connected = true,
-                    tasks = tasks,
+                    tasks = observation.tasks,
+                    pendingSyncCount = observation.pendingSyncCount,
+                    blockedSyncCount = observation.blockedSyncCount,
+                    conflictCount = observation.conflictCount,
                     loading = false,
                 )
             }
