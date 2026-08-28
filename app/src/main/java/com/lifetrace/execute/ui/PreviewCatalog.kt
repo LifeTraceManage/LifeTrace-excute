@@ -46,6 +46,7 @@ private fun TasksPreview() = PreviewTheme {
         onProfile = {},
         onCloudConnection = {},
         onCreateTask = { _, _ -> },
+        onUpdateTask = { _, _, _, _, _ -> },
         onToggleTask = {},
         onDeleteTask = {},
         onSync = {},
