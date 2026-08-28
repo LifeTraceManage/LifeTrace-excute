@@ -114,7 +114,8 @@ fun LifeTraceExecuteApp() {
             composable("tasks") {
                 TasksScreen(
                     contentPadding = innerPadding,
-                    onProfile = { navController.navigate("profile") }
+                    onProfile = { navController.navigate("profile") },
+                    onCloudConnection = { navController.navigate("cloud") },
                 )
             }
             composable("projects") {
