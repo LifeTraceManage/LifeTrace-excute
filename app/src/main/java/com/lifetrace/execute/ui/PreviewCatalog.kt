@@ -4,12 +4,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.lifetrace.execute.domain.task.ExecutionTask
+import com.lifetrace.execute.domain.task.ExecutionTaskPriority
+import com.lifetrace.execute.domain.task.ExecutionTaskStatus
+import com.lifetrace.execute.presentation.tasks.TasksUiState
 import com.lifetrace.execute.ui.screens.CalendarScreen
 import com.lifetrace.execute.ui.screens.CollectionScreen
 import com.lifetrace.execute.ui.screens.ProfileScreen
 import com.lifetrace.execute.ui.screens.ProjectsScreen
 import com.lifetrace.execute.ui.screens.ReviewScreen
-import com.lifetrace.execute.ui.screens.TasksScreen
+import com.lifetrace.execute.ui.screens.TasksContent
 import com.lifetrace.execute.ui.screens.TodayScreen
 import com.lifetrace.execute.ui.theme.LifeTraceExecuteTheme
 
@@ -29,7 +33,24 @@ private fun TodayPreview() = PreviewTheme {
 @Preview(name = "Tasks", showBackground = true, widthDp = 360, heightDp = 800)
 @Composable
 private fun TasksPreview() = PreviewTheme {
-    TasksScreen(previewPadding, onProfile = {})
+    TasksContent(
+        contentPadding = previewPadding,
+        state = TasksUiState(
+            connected = true,
+            loading = false,
+            tasks = listOf(
+                previewTask("1", "完善 LifeTrace Execute 同步", ExecutionTaskPriority.HIGH),
+                previewTask("2", "检查 Android 构建", ExecutionTaskPriority.NORMAL, ExecutionTaskStatus.DONE),
+            ),
+        ),
+        onProfile = {},
+        onCloudConnection = {},
+        onCreateTask = { _, _ -> },
+        onToggleTask = {},
+        onDeleteTask = {},
+        onSync = {},
+        onClearFeedback = {},
+    )
 }
 
 @Preview(name = "Projects", showBackground = true, widthDp = 360, heightDp = 800)
@@ -53,7 +74,7 @@ private fun CollectionPreview() = PreviewTheme {
 @Preview(name = "Profile", showBackground = true, widthDp = 360, heightDp = 800)
 @Composable
 private fun ProfilePreview() = PreviewTheme {
-    ProfileScreen(onBack = {})
+    ProfileScreen(onBack = {}, onCloud = {})
 }
 
 @Preview(name = "Review", showBackground = true, widthDp = 360, heightDp = 800)
@@ -61,3 +82,20 @@ private fun ProfilePreview() = PreviewTheme {
 private fun ReviewPreview() = PreviewTheme {
     ReviewScreen(onBack = {})
 }
+
+private fun previewTask(
+    id: String,
+    title: String,
+    priority: ExecutionTaskPriority,
+    status: ExecutionTaskStatus = ExecutionTaskStatus.TODO,
+) = ExecutionTask(
+    id = id,
+    userId = "preview-user",
+    title = title,
+    status = status,
+    priority = priority,
+    completedAt = if (status == ExecutionTaskStatus.DONE) "2026-08-28T00:30:00Z" else null,
+    createdAt = "2026-08-28T00:00:00Z",
+    updatedAt = "2026-08-28T00:30:00Z",
+    localVersion = 1,
+)
