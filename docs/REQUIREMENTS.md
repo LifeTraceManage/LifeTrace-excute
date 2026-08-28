@@ -54,7 +54,11 @@ LifeTrace Execute 必须连接 `zhouxingxing1279/LifeTrace` 现有 Cloud，不�
 - 支持 baseServerVersion 乐观冲突；
 - 支持 tombstone 删除传播；
 - 支持新设备恢复；
+- 登录成功后无需用户额外操作即可排队首次同步；
+- 本地业务修改后应自动触发受网络约束的后台同步；
 - 最终不同 LifeTrace 客户端看到同一份用户数据。
+
+当前代码已实现 Auth、安全会话、Task Sync Coordinator、手动同步、登录后首次同步排队和 WorkManager 自动同步；真实多设备 E2E 仍是完成 Gate。
 
 ### REQ-CLOUD-002 Local-first / 离线执行
 
@@ -75,8 +79,10 @@ Android 不允许把网络请求作为主要业务写入的前置条件。
 - 已同步数据仍可读取；
 - 任务等核心业务仍可修改；
 - 修改进入 Outbox；
-- 网络恢复后重试；
-- API 暂时失败不得导致本地任务丢失。
+- 网络恢复后由 WorkManager 自动重试；
+- API 暂时失败不得导致本地任务丢失；
+- 认证失败不得形成无限重试循环；
+- retryable / 429 / 5xx / IO 错误允许受控退避重试。
 
 ---
 
@@ -127,6 +133,8 @@ Android 不允许把网络请求作为主要业务写入的前置条件。
 - 是否启用
 - 创建时间 / 更新时间
 
+Cloud entity：`execution.important_date`。该类型已经进入 LifeTrace Sync v1 Registry；正式 Android 实现前仍需补强类型 DTO / Schema。
+
 #### 日历页展示
 
 - 日历页顶部或月历附近提供“重要日期”入口。
@@ -175,7 +183,23 @@ Android 不允许把网络请求作为主要业务写入的前置条件。
 - LifeTrace Cloud 多端同步；
 - 冲突处理。
 
-当前已实现代码：Room 列表、新建、优先级、完成/恢复、删除、搜索、筛选、Outbox 与手动 Task Sync。其余字段和 UI 继续开发。
+当前已实现代码：
+
+- Room Flow 正式任务列表；
+- 新建 / 编辑 / 删除；
+- 标题 / 描述；
+- TODO / 进行中 / 等待 / 已完成；
+- 优先级；
+- 完成 / 恢复；
+- 搜索 / 筛选；
+- `scheduledAt` / `dueAt`；
+- Android 原生日期时间选择器；
+- Task + Outbox 同事务；
+- 手动 Task Sync；
+- WorkManager 自动同步；
+- 登录后首次 Task Snapshot 同步排队。
+
+仍需完成：Project 归属、Reminder、重复规则 / occurrence、完整 waiting workflow 和冲突解决 UI。
 
 ### REQ-TASK-001 番茄时钟
 
@@ -215,6 +239,8 @@ Android 不允许把网络请求作为主要业务写入的前置条件。
 
 后续数据层应允许保存用户默认专注/休息配置。
 
+Cloud history entity：`execution.focus_session`。该类型已经进入 LifeTrace Sync v1 Registry；正式 Android 实现前仍需补强类型 DTO / Schema。
+
 #### 计时行为
 
 - 在应用内部切换“今天 / 任务 / 项目 / 日历 / 收集”时，计时状态不能因为页面切换被重置。
@@ -239,11 +265,11 @@ Android 不允许把网络请求作为主要业务写入的前置条件。
 | --- | --- |
 | REQ-BASE-001 一级导航 | 已确认 |
 | REQ-BASE-002 功能保护 | 已确认 |
-| REQ-CLOUD-001 Cloud 统一账号与同步 | 开发中 |
-| REQ-CLOUD-002 Local-first | 开发中 |
-| REQ-CAL-001 重要日期 | 前端已设计 / Android 待实现 |
-| REQ-TASK-CORE-001 任务管理 | 开发中 |
-| REQ-TASK-001 番茄时钟 | 前端已设计 / Android 待实现 |
+| REQ-CLOUD-001 Cloud 统一账号与同步 | 开发中，Task 自动同步已接入 |
+| REQ-CLOUD-002 Local-first | 开发中，Task 已落地 |
+| REQ-CAL-001 重要日期 | 前端已设计 / Android 待实现；Cloud entity 已注册 |
+| REQ-TASK-CORE-001 任务管理 | 开发中，基础 CRUD/编辑/时间/后台同步已实现 |
+| REQ-TASK-001 番茄时钟 | 前端已设计 / Android 待实现；Cloud entity 已注册 |
 
 ## 6. 变更记录
 
@@ -252,11 +278,15 @@ Android 不允许把网络请求作为主要业务写入的前置条件。
 - 登记 `REQ-CLOUD-001`：LifeTrace Cloud 统一账号与 Sync v1。
 - 登记 `REQ-CLOUD-002`：Android Local-first / Room + Outbox。
 - 登记 `REQ-TASK-CORE-001`：正式任务管理与多端同步。
-- 记录 Task 运行时已经开始从 Mock 迁移到 Room / Repository。
+- Task 正式运行时从 Mock 迁移到 Room / Repository。
+- Task 补齐标题、描述、状态、优先级、安排时间与截止时间编辑。
+- 接入 WorkManager：本地修改后自动同步、周期兜底同步、登录后首次同步。
+- LifeTrace Cloud Registry 注册 `execution.important_date` 与 `execution.focus_session`。
+- Android CI 已真实验证 assembleDebug / unit test / lint 全部通过。
 
 ### 2026-08-27
 
 - 建立长期需求台账。
 - 新增 `REQ-CAL-001`：日历重要日期，支持仅一次 / 每年、公历 / 农历、生日场景。
 - 新增 `REQ-TASK-001`：任务页番茄时钟。
-- 明确本轮先完成浏览器高保真前端设计，Android Compose 暂不提前同步。
+- 明确浏览器高保真前端设计作为交互基线，正式业务逻辑落到 Android Compose / Local-first 数据层。
