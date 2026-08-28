@@ -28,7 +28,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lifetrace.execute.domain.task.ExecutionTask
@@ -63,7 +63,6 @@ import com.lifetrace.execute.ui.theme.LifeBlueSoft
 import com.lifetrace.execute.ui.theme.LifeBorder
 import com.lifetrace.execute.ui.theme.LifeMuted
 import com.lifetrace.execute.ui.theme.LifeSurface
-import com.lifetrace.execute.ui.theme.LifeSurfaceMuted
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -87,6 +86,7 @@ fun TasksScreen(
         onProfile = onProfile,
         onCloudConnection = onCloudConnection,
         onCreateTask = viewModel::createTask,
+        onUpdateTask = viewModel::updateTask,
         onToggleTask = viewModel::toggleCompleted,
         onDeleteTask = viewModel::deleteTask,
         onSync = viewModel::syncNow,
@@ -101,6 +101,7 @@ fun TasksContent(
     onProfile: () -> Unit,
     onCloudConnection: () -> Unit,
     onCreateTask: (String, ExecutionTaskPriority) -> Unit,
+    onUpdateTask: (ExecutionTask, String, String?, ExecutionTaskStatus, ExecutionTaskPriority) -> Unit,
     onToggleTask: (ExecutionTask) -> Unit,
     onDeleteTask: (ExecutionTask) -> Unit,
     onSync: () -> Unit,
@@ -109,6 +110,7 @@ fun TasksContent(
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf("全部") }
     var showNewTask by rememberSaveable { mutableStateOf(false) }
+    var editingTask by remember { mutableStateOf<ExecutionTask?>(null) }
     val filters = listOf("全部", "进行中", "等待", "已完成")
 
     val visibleTasks = remember(state.tasks, query, filter) {
@@ -262,6 +264,7 @@ fun TasksContent(
                 items(visibleTasks, key = { it.id }) { task ->
                     ExecutionTaskRow(
                         task = task,
+                        onOpen = { editingTask = task },
                         onToggle = { onToggleTask(task) },
                         onDelete = { onDeleteTask(task) },
                     )
@@ -276,6 +279,17 @@ fun TasksContent(
             onCreate = { title, priority ->
                 onCreateTask(title, priority)
                 showNewTask = false
+            },
+        )
+    }
+
+    editingTask?.let { task ->
+        EditTaskSheet(
+            task = task,
+            onDismiss = { editingTask = null },
+            onSave = { title, description, status, priority ->
+                onUpdateTask(task, title, description, status, priority)
+                editingTask = null
             },
         )
     }
@@ -344,6 +358,7 @@ private fun EmptyTasksCard(
 @Composable
 private fun ExecutionTaskRow(
     task: ExecutionTask,
+    onOpen: () -> Unit,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -351,7 +366,9 @@ private fun ExecutionTaskRow(
         colors = CardDefaults.cardColors(containerColor = LifeSurface),
         shape = RoundedCornerShape(16.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, LifeBorder),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen),
     ) {
         Row(
             modifier = Modifier
@@ -366,7 +383,6 @@ private fun ExecutionTaskRow(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(onClick = onToggle)
                     .padding(vertical = 4.dp),
             ) {
                 Text(
@@ -379,6 +395,16 @@ private fun ExecutionTaskRow(
                     },
                     color = if (task.status == ExecutionTaskStatus.DONE) LifeMuted else MaterialTheme.colorScheme.onSurface,
                 )
+                task.description?.takeIf { it.isNotBlank() }?.let { description ->
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        description,
+                        color = LifeMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
@@ -439,18 +465,10 @@ private fun NewTaskSheet(
                 label = { Text("任务标题") },
                 singleLine = true,
             )
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("优先级", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ExecutionTaskPriority.entries.forEach { item ->
-                        FilterChip(
-                            selected = priority == item,
-                            onClick = { priority = item },
-                            label = { Text(item.label()) },
-                        )
-                    }
-                }
-            }
+            PrioritySelector(
+                selected = priority,
+                onSelected = { priority = it },
+            )
             Button(
                 onClick = { onCreate(title, priority) },
                 modifier = Modifier.fillMaxWidth(),
@@ -459,6 +477,119 @@ private fun NewTaskSheet(
                 Text("保存到本地")
             }
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun EditTaskSheet(
+    task: ExecutionTask,
+    onDismiss: () -> Unit,
+    onSave: (String, String?, ExecutionTaskStatus, ExecutionTaskPriority) -> Unit,
+) {
+    var title by remember(task.id) { mutableStateOf(task.title) }
+    var description by remember(task.id) { mutableStateOf(task.description.orEmpty()) }
+    var status by remember(task.id) { mutableStateOf(task.status) }
+    var priority by remember(task.id) { mutableStateOf(task.priority) }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("编辑任务", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                "修改会先保存到本机，再通过 Outbox 增量同步。",
+                color = LifeMuted,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("任务标题") },
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("描述") },
+                minLines = 2,
+                maxLines = 5,
+            )
+            StatusSelector(
+                selected = status,
+                onSelected = { status = it },
+            )
+            PrioritySelector(
+                selected = priority,
+                onSelected = { priority = it },
+            )
+            Button(
+                onClick = {
+                    onSave(
+                        title.trim(),
+                        description.trim().takeIf { it.isNotEmpty() },
+                        status,
+                        priority,
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = title.isNotBlank(),
+            ) {
+                Text("保存修改")
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun StatusSelector(
+    selected: ExecutionTaskStatus,
+    onSelected: (ExecutionTaskStatus) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("状态", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ExecutionTaskStatus.entries.take(2).forEach { item ->
+                FilterChip(
+                    selected = selected == item,
+                    onClick = { onSelected(item) },
+                    label = { Text(item.label()) },
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ExecutionTaskStatus.entries.drop(2).forEach { item ->
+                FilterChip(
+                    selected = selected == item,
+                    onClick = { onSelected(item) },
+                    label = { Text(item.label()) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrioritySelector(
+    selected: ExecutionTaskPriority,
+    onSelected: (ExecutionTaskPriority) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("优先级", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ExecutionTaskPriority.entries.forEach { item ->
+                FilterChip(
+                    selected = selected == item,
+                    onClick = { onSelected(item) },
+                    label = { Text(item.label()) },
+                )
+            }
         }
     }
 }
