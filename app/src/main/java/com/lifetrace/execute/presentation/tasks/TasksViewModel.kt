@@ -6,8 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.lifetrace.execute.core.cloud.DeviceIdentityStore
 import com.lifetrace.execute.core.cloud.SecureSessionStore
 import com.lifetrace.execute.data.local.LifeTraceExecuteDatabase
+import com.lifetrace.execute.data.local.SyncConflictEntity
 import com.lifetrace.execute.data.repository.TaskRepository
 import com.lifetrace.execute.data.sync.SyncScheduler
+import com.lifetrace.execute.data.sync.TaskConflictResolver
 import com.lifetrace.execute.data.sync.TaskSyncCoordinator
 import com.lifetrace.execute.domain.task.ExecutionTask
 import com.lifetrace.execute.domain.task.ExecutionTaskPriority
@@ -18,6 +20,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+
+data class TaskConflictUi(
+    val conflictId: String,
+    val taskId: String,
+    val localTitle: String?,
+    val serverTitle: String?,
+    val serverDeleted: Boolean,
+    val reason: String,
+)
 
 data class TasksUiState(
     val connected: Boolean = false,
@@ -27,6 +39,8 @@ data class TasksUiState(
     val pendingSyncCount: Int = 0,
     val blockedSyncCount: Int = 0,
     val conflictCount: Int = 0,
+    val conflicts: List<TaskConflictUi> = emptyList(),
+    val resolvingConflictId: String? = null,
     val message: String? = null,
     val error: String? = null,
 )
@@ -35,7 +49,7 @@ private data class TaskObservation(
     val tasks: List<ExecutionTask>,
     val pendingSyncCount: Int,
     val blockedSyncCount: Int,
-    val conflictCount: Int,
+    val conflicts: List<TaskConflictUi>,
 )
 
 class TasksViewModel(application: Application) : AndroidViewModel(application) {
@@ -46,6 +60,7 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
     private val sessionStore = SecureSessionStore(application)
     private val deviceIdentityStore = DeviceIdentityStore(application)
     private val syncCoordinator = TaskSyncCoordinator(application, database = database)
+    private val conflictResolver = TaskConflictResolver(database)
 
     private val _state = MutableStateFlow(TasksUiState())
     val state: StateFlow<TasksUiState> = _state.asStateFlow()
@@ -90,7 +105,7 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
                     tasks = tasks,
                     pendingSyncCount = pending,
                     blockedSyncCount = blocked,
-                    conflictCount = conflicts.size,
+                    conflicts = conflicts.map { it.toUi(tasks) },
                 )
             }.collect { observation ->
                 _state.value = _state.value.copy(
@@ -98,7 +113,8 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
                     tasks = observation.tasks,
                     pendingSyncCount = observation.pendingSyncCount,
                     blockedSyncCount = observation.blockedSyncCount,
-                    conflictCount = observation.conflictCount,
+                    conflictCount = observation.conflicts.size,
+                    conflicts = observation.conflicts,
                     loading = false,
                 )
             }
@@ -206,6 +222,56 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun keepServer(conflictId: String) {
+        if (_state.value.resolvingConflictId != null) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(
+                resolvingConflictId = conflictId,
+                message = null,
+                error = null,
+            )
+            try {
+                conflictResolver.keepServer(conflictId)
+                _state.value = _state.value.copy(
+                    resolvingConflictId = null,
+                    message = "已接受云端版本，相关本地冲突队列已清理",
+                )
+            } catch (error: Throwable) {
+                _state.value = _state.value.copy(
+                    resolvingConflictId = null,
+                    error = error.message ?: "接受云端版本失败",
+                )
+            }
+        }
+    }
+
+    fun keepLocal(conflictId: String) {
+        if (_state.value.resolvingConflictId != null) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(
+                resolvingConflictId = conflictId,
+                message = null,
+                error = null,
+            )
+            try {
+                conflictResolver.keepLocal(
+                    conflictId = conflictId,
+                    deviceId = deviceIdentityStore.deviceId(),
+                )
+                SyncScheduler.enqueueAfterLocalChange(appContext)
+                _state.value = _state.value.copy(
+                    resolvingConflictId = null,
+                    message = "已保留本地版本，并基于最新云端版本重新排队同步",
+                )
+            } catch (error: Throwable) {
+                _state.value = _state.value.copy(
+                    resolvingConflictId = null,
+                    error = error.message ?: "保留本地版本失败",
+                )
+            }
+        }
+    }
+
     fun syncNow() {
         if (!_state.value.connected || _state.value.syncing) return
         viewModelScope.launch {
@@ -237,4 +303,25 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
             _state.value = _state.value.copy(message = null, error = null)
         }
     }
+}
+
+private fun SyncConflictEntity.toUi(tasks: List<ExecutionTask>): TaskConflictUi {
+    val localTitle = tasks.firstOrNull { it.id == entityId }?.title
+    val serverTitle = if (serverDeleted) {
+        null
+    } else {
+        serverEntityJson?.let { payload ->
+            runCatching {
+                JSONObject(payload).optString("title").takeIf { it.isNotBlank() }
+            }.getOrNull()
+        }
+    }
+    return TaskConflictUi(
+        conflictId = conflictId,
+        taskId = entityId,
+        localTitle = localTitle,
+        serverTitle = serverTitle,
+        serverDeleted = serverDeleted,
+        reason = reason,
+    )
 }
