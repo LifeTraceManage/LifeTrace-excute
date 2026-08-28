@@ -4,7 +4,6 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
-import org.json.JSONArray
 import org.json.JSONObject
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -112,23 +111,4 @@ class SecureSessionStore(context: Context) {
         private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
     }
-}
-
-private fun Iterable<String>.toJsonArray(): JSONArray = JSONArray().also { array ->
-    forEach { value -> array.put(value) }
-}
-
-private fun JSONArray?.toStringList(): List<String> {
-    if (this == null) return emptyList()
-    return buildList {
-        for (index in 0 until length()) {
-            val value = optString(index)
-            if (value.isNotBlank()) add(value)
-        }
-    }
-}
-
-private fun JSONObject.optNullableString(name: String): String? {
-    if (!has(name) || isNull(name)) return null
-    return optString(name).takeIf { it.isNotBlank() }
 }
