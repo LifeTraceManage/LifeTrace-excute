@@ -13,17 +13,28 @@
 已提交：
 
 - `9180525c20d7233cdce7118a4c6d3425d3276fb5`
-  - 新增 `lifetrace-execute-android` AppId。
+  - 新增 `AppId::EXECUTE_ANDROID = lifetrace-execute-android`。
 - `ded783a0848fde553155f5ace5a2ffa966cfbf3a`
   - Execute Android 进入 supported app 授权逻辑；
   - 授予 account / devices / sync / execution / habits / reviews / files 所需权限。
+- `fad49f3e5e3690ab998ff00957249050e2eb64e3`
+  - Registry 新增 `execution.important_date`；
+  - Registry 新增 `execution.focus_session`；
+  - 两者均为 UserOwned / Bidirectional / Optimistic。
+- `56e08ed4bf0403e4b0e2c490dcc91ceaadc5697f`
+  - generic `EntityPayload` 接受两个新 execution entity；
+  - 当前使用 RegisteredJson 进入统一 Sync v1。
+
+验证：
+
+- 本轮 LifeTrace contract tests 已通过；
+- Cloud tests / Clippy / Docker / PostgreSQL smoke 所在完整 workflow 在记录本文时仍继续执行，未提前标记全绿。
 
 已确认但未完成：
 
 - `AuthService::capabilities()` 的信息性 `supportedApps` 硬编码列表仍需补 Execute；
 - execution payload 仍大量使用 RegisteredJson；
-- `execution.important_date` 未注册；
-- `execution.focus_session` 未注册。
+- ImportantDate / FocusSession 强类型 DTO / Schema 尚未定义。
 
 ### LifeTrace Execute Android
 
@@ -53,7 +64,9 @@ core/cloud/
 - scope 校验；
 - Sync capabilities；
 - Keystore AES-GCM；
-- access-token-expired 单次刷新重放。
+- access-token-expired 单次刷新重放；
+- 登录成功后保存安全会话；
+- 登录后立即 enqueue 首次 Task Sync。
 
 #### Room / Outbox
 
@@ -92,9 +105,15 @@ data/repository/TaskWireMapper.kt
 - update；
 - complete / reopen；
 - delete；
+- 标题；
+- 描述；
+- TODO / IN_PROGRESS / WAITING / DONE；
+- priority；
+- dueAt；
+- scheduledAt；
 - serverVersion；
 - localVersion；
-- project dependency；
+- project dependency 字段；
 - sync payload 映射。
 
 #### Task Sync
@@ -102,7 +121,10 @@ data/repository/TaskWireMapper.kt
 已实现：
 
 ```text
-data/sync/TaskSyncCoordinator.kt
+data/sync/
+├── TaskSyncCoordinator.kt
+├── TaskSyncWorker.kt
+└── SyncScheduler.kt
 ```
 
 覆盖：
@@ -118,7 +140,13 @@ data/sync/TaskSyncCoordinator.kt
 - tombstone delete；
 - refresh-token session manager；
 - 同实体离线连续修改串行发送；
-- accepted 后下一 change rebase。
+- accepted 后下一 change rebase；
+- 本地写入后 3 秒防抖式 OneTimeWork；
+- NetworkType.CONNECTED 网络约束；
+- 每 6 小时周期兜底；
+- 登录后的首次立即同步；
+- retryable / 429 / 5xx / IOException 指数退避；
+- 401 / 403 不无限重试。
 
 #### Task UI
 
@@ -127,6 +155,7 @@ data/sync/TaskSyncCoordinator.kt
 ```text
 presentation/tasks/TasksViewModel.kt
 ui/screens/TasksScreen.kt
+ui/components/TaskDateTimePicker.kt
 ```
 
 正式运行时：
@@ -136,21 +165,32 @@ ui/screens/TasksScreen.kt
 - 搜索；
 - 状态筛选；
 - 新建 Bottom Sheet；
+- 编辑 Bottom Sheet；
+- 标题 / 描述；
+- TODO / 进行中 / 等待 / 已完成；
 - 优先级；
 - 完成 / 恢复；
 - 删除；
+- scheduledAt / dueAt；
+- Android 原生日期与时间选择器；
+- 本地时区展示；
+- UTC Instant 持久化；
 - 手动同步；
 - Cloud 未连接引导。
+
+任务卡片点击现在进入编辑，不再把整行点击误作为“完成”；完成动作保留在明确的 Checkbox 上。
 
 Preview 仍允许使用独立样例数据，但不会作为生产数据源。
 
 #### Cloud UI
 
-`CloudConnectionScreen` 已新增“立即同步任务”，会调用正式 TaskSyncCoordinator 并展示 Snapshot / Push / Pull / Conflict / Rejected 数量。
+`CloudConnectionScreen` 已提供“立即同步任务”，会调用正式 TaskSyncCoordinator 并展示 Snapshot / Push / Pull / Conflict / Rejected 数量。
 
-#### CI
+登录完成后 UI 会提示首次同步已排队，实际执行由 WorkManager 负责。
 
-新增：
+#### Android CI
+
+工作流：
 
 ```text
 .github/workflows/android-ci.yml
@@ -164,32 +204,56 @@ Preview 仍允许使用独立样例数据，但不会作为生产数据源。
 - testDebugUnitTest；
 - lintDebug。
 
-当前验证结论：
+已验证：
 
-- CI 配置：已提交；
-- Workflow run：尚未从 GitHub API 观察到；
-- Android Build：**未确认通过**。
+```text
+0e0aafbb35ceddbf3508ebce823a70b121567a04
+run 33133755880
+workflow SUCCESS
+```
+
+该 Gate 验证了 WorkManager、本地修改自动 enqueue、Application/Manifest 网络配置等代码。
+
+随后：
+
+```text
+b139424b855f6ac0bacde9e6728ddd1cdd8ac87e
+run 33134713967
+assembleDebug       PASS
+testDebugUnitTest   PASS
+lintDebug           PASS
+workflow            SUCCESS
+```
+
+该 Gate 进一步验证了“Cloud 登录后首次同步排队”代码。
+
+因此当前 Android Build 状态为：**真实 CI 已确认通过。**
 
 ## 当前禁止提前关闭的 Gate
 
-以下任何一项未验证前，不得在文档中写“已完成”：
+以下任何一项未验证前，不得在文档中写“产品已完成 / 云同步已最终验收”：
 
-1. Android CI 真实 compile/test/lint；
-2. 真机或模拟器启动；
-3. Cloud 真实账号 login；
-4. Task push 到 PostgreSQL；
-5. 第二设备 pull；
-6. duplicate；
-7. conflict；
-8. tombstone；
-9. snapshot rebuild。
+1. 真机或模拟器完整业务启动回归；
+2. Cloud 真实账号 login；
+3. Task push 到 PostgreSQL；
+4. 第二设备 pull；
+5. duplicate；
+6. conflict；
+7. tombstone；
+8. snapshot rebuild；
+9. 断网修改后恢复网络由 WorkManager 自动上传；
+10. Reminder / Project / recurrence 与剩余模块同步。
+
+Android compile/test/lint Gate 已通过，不再属于未验证项。
 
 ## 下一实施批次
 
-- Task 编辑 / dueAt / scheduledAt / reminder；
-- 冲突解决页面；
-- WorkManager 自动同步；
+- Task 冲突解决页面与 server/local resolution；
+- Reminder / Project 归属 / recurrence / occurrence；
+- Auth capabilities Execute AppId 展示；
+- execution 强类型 DTO / Schema；
 - Project Local-first；
-- Cloud execution typed DTO；
-- ImportantDate / FocusSession；
-- Calendar / Pomodoro 正式实现。
+- ImportantDate / Calendar Local-first；
+- Android 后台番茄计时与 FocusSession；
+- 双设备真实 E2E；
+- Release Gate。
