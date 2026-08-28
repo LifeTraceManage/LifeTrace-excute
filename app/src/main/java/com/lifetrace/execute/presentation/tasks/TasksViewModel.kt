@@ -76,7 +76,13 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun createTask(title: String, priority: ExecutionTaskPriority) {
+    fun createTask(
+        title: String,
+        description: String?,
+        priority: ExecutionTaskPriority,
+        dueAt: String?,
+        scheduledAt: String?,
+    ) {
         val userId = activeUserId ?: run {
             _state.value = _state.value.copy(error = "请先连接 LifeTrace Cloud")
             return
@@ -87,7 +93,10 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
                     userId = userId,
                     deviceId = deviceIdentityStore.deviceId(),
                     title = title,
+                    description = description,
                     priority = priority,
+                    dueAt = dueAt,
+                    scheduledAt = scheduledAt,
                 )
                 _state.value = _state.value.copy(
                     message = "任务已保存到本地，并进入待同步队列",
@@ -105,6 +114,8 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
         description: String?,
         status: ExecutionTaskStatus,
         priority: ExecutionTaskPriority,
+        dueAt: String?,
+        scheduledAt: String?,
     ) {
         viewModelScope.launch {
             try {
@@ -115,6 +126,8 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
                     description = description,
                     status = status,
                     priority = priority,
+                    dueAt = dueAt,
+                    scheduledAt = scheduledAt,
                 )
                 _state.value = _state.value.copy(
                     message = "任务修改已保存到本地，并进入待同步队列",
