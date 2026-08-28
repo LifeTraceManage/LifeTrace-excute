@@ -197,6 +197,8 @@ fun TasksContent(
                             Text(if (state.syncing) "同步中" else "同步")
                         }
                     }
+                    Spacer(Modifier.height(10.dp))
+                    SyncHealthCard(state)
                     Spacer(Modifier.height(14.dp))
                 }
 
@@ -300,6 +302,98 @@ fun TasksContent(
                 onUpdateTask(task, title, description, status, priority, dueAt, scheduledAt)
                 editingTask = null
             },
+        )
+    }
+}
+
+@Composable
+private fun SyncHealthCard(state: TasksUiState) {
+    val hasProblem = state.blockedSyncCount > 0 || state.conflictCount > 0
+    val containerColor = if (hasProblem) {
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val primaryColor = if (hasProblem) {
+        MaterialTheme.colorScheme.onErrorContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                if (hasProblem) "同步需要处理" else "同步状态",
+                style = MaterialTheme.typography.labelLarge,
+                color = primaryColor,
+            )
+            Row(modifier = Modifier.fillMaxWidth()) {
+                SyncHealthMetric(
+                    label = "待同步",
+                    value = state.pendingSyncCount,
+                    modifier = Modifier.weight(1f),
+                    color = primaryColor,
+                )
+                SyncHealthMetric(
+                    label = "已阻塞",
+                    value = state.blockedSyncCount,
+                    modifier = Modifier.weight(1f),
+                    color = primaryColor,
+                )
+                SyncHealthMetric(
+                    label = "冲突",
+                    value = state.conflictCount,
+                    modifier = Modifier.weight(1f),
+                    color = primaryColor,
+                )
+            }
+            if (hasProblem) {
+                Text(
+                    "本地数据不会丢失；阻塞或冲突需要在后续冲突处理界面确认后才能继续上传。",
+                    color = primaryColor,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else if (state.pendingSyncCount > 0) {
+                Text(
+                    "已进入 Outbox，网络可用时由后台同步自动上传。",
+                    color = primaryColor,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else {
+                Text(
+                    "当前没有等待上传或需要人工处理的任务变更。",
+                    color = primaryColor,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncHealthMetric(
+    label: String,
+    value: Int,
+    modifier: Modifier = Modifier,
+    color: androidx.compose.ui.graphics.Color,
+) {
+    Column(modifier = modifier) {
+        Text(
+            value.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            color = color,
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = color,
         )
     }
 }
