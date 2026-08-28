@@ -10,6 +10,7 @@ import com.lifetrace.execute.core.cloud.DeviceIdentityStore
 import com.lifetrace.execute.core.cloud.LifeTraceCloudClient
 import com.lifetrace.execute.core.cloud.SecureSessionStore
 import com.lifetrace.execute.core.cloud.StoredCloudSession
+import com.lifetrace.execute.data.sync.SyncScheduler
 import com.lifetrace.execute.data.sync.TaskSyncCoordinator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +32,7 @@ data class CloudConnectionUiState(
 )
 
 class CloudConnectionViewModel(application: Application) : AndroidViewModel(application) {
+    private val appContext = application.applicationContext
     private val client = LifeTraceCloudClient()
     private val sessionStore = SecureSessionStore(application)
     private val identityStore = DeviceIdentityStore(application)
@@ -93,7 +95,10 @@ class CloudConnectionViewModel(application: Application) : AndroidViewModel(appl
                     schemaVersion = syncCapabilities.schemaVersion,
                 )
                 sessionStore.save(stored)
-                _state.value = stored.toUiState()
+                SyncScheduler.enqueueInitialSync(appContext)
+                _state.value = stored.toUiState().copy(
+                    lastSyncMessage = "Cloud 已连接，首次任务同步已排队",
+                )
             } catch (error: Throwable) {
                 _state.value = _state.value.copy(
                     loading = false,
