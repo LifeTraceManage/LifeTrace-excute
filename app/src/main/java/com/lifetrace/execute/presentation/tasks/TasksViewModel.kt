@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-
 data class TasksUiState(
     val connected: Boolean = false,
     val tasks: List<ExecutionTask> = emptyList(),
@@ -96,6 +95,33 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
                 )
             } catch (error: Throwable) {
                 _state.value = _state.value.copy(error = error.message ?: "新建任务失败")
+            }
+        }
+    }
+
+    fun updateTask(
+        task: ExecutionTask,
+        title: String,
+        description: String?,
+        status: ExecutionTaskStatus,
+        priority: ExecutionTaskPriority,
+    ) {
+        viewModelScope.launch {
+            try {
+                repository.updateTask(
+                    task = task,
+                    deviceId = deviceIdentityStore.deviceId(),
+                    title = title,
+                    description = description,
+                    status = status,
+                    priority = priority,
+                )
+                _state.value = _state.value.copy(
+                    message = "任务修改已保存到本地，并进入待同步队列",
+                    error = null,
+                )
+            } catch (error: Throwable) {
+                _state.value = _state.value.copy(error = error.message ?: "保存任务失败")
             }
         }
     }
