@@ -12,6 +12,7 @@ import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
 
 object SyncScheduler {
+    private const val INITIAL_SYNC_WORK = "lifetrace-task-sync-after-cloud-login"
     private const val ONE_TIME_WORK = "lifetrace-task-sync-after-local-change"
     private const val PERIODIC_WORK = "lifetrace-task-sync-periodic"
 
@@ -32,15 +33,35 @@ object SyncScheduler {
         )
     }
 
+    fun enqueueInitialSync(context: Context) {
+        enqueueOneTime(
+            context = context,
+            uniqueWorkName = INITIAL_SYNC_WORK,
+            initialDelaySeconds = 0,
+        )
+    }
+
     fun enqueueAfterLocalChange(context: Context) {
+        enqueueOneTime(
+            context = context,
+            uniqueWorkName = ONE_TIME_WORK,
+            initialDelaySeconds = 3,
+        )
+    }
+
+    private fun enqueueOneTime(
+        context: Context,
+        uniqueWorkName: String,
+        initialDelaySeconds: Long,
+    ) {
         val request = OneTimeWorkRequestBuilder<TaskSyncWorker>()
             .setConstraints(networkConstraints)
-            .setInitialDelay(3, TimeUnit.SECONDS)
+            .setInitialDelay(initialDelaySeconds, TimeUnit.SECONDS)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
 
         WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
-            ONE_TIME_WORK,
+            uniqueWorkName,
             ExistingWorkPolicy.REPLACE,
             request,
         )
