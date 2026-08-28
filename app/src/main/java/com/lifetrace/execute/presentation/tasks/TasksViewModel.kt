@@ -7,6 +7,7 @@ import com.lifetrace.execute.core.cloud.DeviceIdentityStore
 import com.lifetrace.execute.core.cloud.SecureSessionStore
 import com.lifetrace.execute.data.local.LifeTraceExecuteDatabase
 import com.lifetrace.execute.data.repository.TaskRepository
+import com.lifetrace.execute.data.sync.SyncScheduler
 import com.lifetrace.execute.data.sync.TaskSyncCoordinator
 import com.lifetrace.execute.domain.task.ExecutionTask
 import com.lifetrace.execute.domain.task.ExecutionTaskPriority
@@ -27,6 +28,7 @@ data class TasksUiState(
 )
 
 class TasksViewModel(application: Application) : AndroidViewModel(application) {
+    private val appContext = application.applicationContext
     private val database = LifeTraceExecuteDatabase.get(application)
     private val repository = TaskRepository(database)
     private val sessionStore = SecureSessionStore(application)
@@ -98,6 +100,7 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
                     dueAt = dueAt,
                     scheduledAt = scheduledAt,
                 )
+                SyncScheduler.enqueueAfterLocalChange(appContext)
                 _state.value = _state.value.copy(
                     message = "任务已保存到本地，并进入待同步队列",
                     error = null,
@@ -129,6 +132,7 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
                     dueAt = dueAt,
                     scheduledAt = scheduledAt,
                 )
+                SyncScheduler.enqueueAfterLocalChange(appContext)
                 _state.value = _state.value.copy(
                     message = "任务修改已保存到本地，并进入待同步队列",
                     error = null,
@@ -151,6 +155,7 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
                         ExecutionTaskStatus.DONE
                     },
                 )
+                SyncScheduler.enqueueAfterLocalChange(appContext)
                 _state.value = _state.value.copy(
                     message = if (task.status == ExecutionTaskStatus.DONE) "任务已恢复" else "任务已完成",
                     error = null,
@@ -166,6 +171,7 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 repository.deleteTask(userId, task.id)
+                SyncScheduler.enqueueAfterLocalChange(appContext)
                 _state.value = _state.value.copy(message = "任务已删除，并进入待同步队列", error = null)
             } catch (error: Throwable) {
                 _state.value = _state.value.copy(error = error.message ?: "删除任务失败")
