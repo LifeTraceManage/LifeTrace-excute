@@ -1,26 +1,28 @@
 # LifeTrace Execute
 
-LifeTrace Execute 是 LifeTrace 的独立执行中心客户端，面向日常任务、项目、日历、快速收集与每日复盘。
+LifeTrace Execute 是 LifeTrace 的独立执行中心 Android 客户端，负责今天、任务、项目、日历、收集与复盘等日常执行场景。
 
-当前项目采用两层实现：
+项目采用：
 
-- **浏览器高保真预览**：当前 UI 设计与交互评审的主基线，零依赖，可直接打开。
-- **Android Jetpack Compose**：最终 Android 客户端实现基线，后续按浏览器预览同步高保真视觉与交互。
+- `web-preview/`：浏览器高保真设计与交互评审基线；
+- `app/`：Jetpack Compose 正式 Android 客户端；
+- `zhouxingxing1279/LifeTrace`：统一 LifeTrace Cloud，Rust + Axum + PostgreSQL。
 
-正式 Android 客户端采用 **Local-first + LifeTrace Cloud Sync**，不会新建第二套云端。云端直接复用 `zhouxingxing1279/LifeTrace` 中的 Rust + Axum + PostgreSQL Cloud、Auth v1 与 Sync v1。
+正式客户端采用 **Local-first + LifeTrace Cloud Sync**。业务写入先落本机 Room 与 Outbox，网络不是本地执行的前置条件。
 
-> 设计原则：新增或重构功能时，不删除已经确认的既有功能入口；允许调整入口位置，但必须保留功能能力。
+> 功能保护规则：新增或重构时不得删除已经确认的项目、收集、复盘、我的、重要日期、番茄钟等能力。允许调整入口，但不能用“简化”为理由移除功能。
 
 ## 文档
 
-- [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)：长期需求台账，后续所有新增/变更需求首先记录在这里。
-- [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md)：**完整项目执行计划、LifeTrace Cloud 接入方案与分阶段验收标准。**
-- [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)：当前完成度与下一阶段计划。
-- [`docs/UI_SPEC.md`](docs/UI_SPEC.md)：界面与组件规范。
+- [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)：长期需求 Source of Truth。
+- [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md)：完整实施计划、Cloud 架构与 Release Gate。
+- [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)：当前真实完成度与下一阶段。
+- [`docs/IMPLEMENTATION_LOG.md`](docs/IMPLEMENTATION_LOG.md)：工程实施记录、提交证据与已知阻塞。
+- [`docs/UI_SPEC.md`](docs/UI_SPEC.md)：视觉、导航与组件规范。
 
-## 信息架构
+## 固定信息架构
 
-底部一级导航固定为 5 个入口：
+底部一级导航固定：
 
 1. 今天
 2. 任务
@@ -28,16 +30,9 @@ LifeTrace Execute 是 LifeTrace 的独立执行中心客户端，面向日常任
 4. 日历
 5. 收集
 
-“我的”通过主页面右上角头像进入，不占用底部导航；“今日复盘”保留在“今天”页面中，并拥有独立复盘页。
+“我的”通过右上角头像进入；“今日复盘”从今天页进入；“番茄时钟”位于任务页；“重要日期”位于日历页。
 
-新增功能仍嵌入现有信息架构：
-
-- **番茄时钟**：位于任务页，不新增一级导航。
-- **重要日期**：位于日历页，并提供独立管理页。
-
-## 当前高保真预览
-
-目录：
+## 浏览器高保真预览
 
 ```text
 web-preview/
@@ -48,182 +43,173 @@ web-preview/
 └── features-v3.js
 ```
 
-无需 Node.js、npm、Android SDK 或外部 CDN。
-
-### 最快查看方式
-
-直接双击：
+直接打开：
 
 ```text
 web-preview/index.html
 ```
 
-也可以在仓库根目录启动本地 HTTP 服务：
+或：
 
 ```bash
 python -m http.server 8080
 ```
 
-浏览器打开：
+访问：
 
 ```text
 http://localhost:8080/web-preview/
 ```
 
-桌面端以约 360 × 800 Android compact 信息密度显示手机模拟框；窄屏/手机浏览器自动切换为全屏 App 预览。
+浏览器版本已经覆盖主导航、今天、任务、项目、日历、收集、我的、复盘，以及重要日期和番茄钟高保真交互。
 
-## 已实现页面与交互
-
-### 今天
-
-- 问候、日期、一周日期条
-- 今日焦点主卡片
-- 完成率、深度工作、已完成、连续执行等概览
-- 今日时间线
-- 今日任务预览
-- 今日复盘入口
-
-### 任务
-
-- 搜索
-- 全部 / 进行中 / 等待 / 已完成筛选
-- 优先级与状态展示
-- 任务完成状态切换
-- 新建任务 Bottom Sheet
-- 可输入并新增 Mock 任务
-- **番茄时钟**
-  - 25 / 5 经典模式
-  - 50 / 10 深度专注模式
-  - 开始 / 暂停 / 重置
-  - 真实前端倒计时
-  - 关联任务
-  - 今日番茄轮次
-  - 页面切换后计时状态保持
-
-### 项目
-
-- 项目数量与整体概览
-- 状态筛选
-- 项目进度
-- 截止日期
-- 成员展示
-- 暂停 / 进行中等状态
-
-### 日历
-
-- 月视图
-- 普通事件日期标记
-- 日期选择
-- 当日日程
-- 不同日程类型的状态区分
-- **重要日期**
-  - 生日 / 纪念日 / 里程碑 / 其他
-  - 仅一次 / 每年重复
-  - 公历 / 农历
-  - 农历年、月、日与闰月输入
-  - 新增 / 编辑 / 删除
-  - 重要日期独立管理页
-  - 公历重要日期月历标记
-
-> 浏览器原型目前只负责农历的完整输入与交互设计，不自行使用简化算法进行农历换算。正式 Android/数据层需要使用可靠的历法实现。
-
-### 收集
-
-- 文本
-- 图片
-- 语音
-- 链接
-- 文件
-- 想法
-- 收集箱分类
-- 最近收集
-
-### 我的
-
-- 个人账号卡
-- LifeTrace Cloud 同步状态
-- 个人资料
-- 账号与安全
-- 设备管理
-- 同步与数据
-- 通知
-- 外观
-- 关于
-- 退出登录
-
-### 今日复盘
-
-- 今日评分
-- 心情选择
-- 今日收获
-- 改进项
-- 明日第一优先级
-- 保存后返回今天
-
-## Android 实现
-
-Android 目录：
-
-```text
-app/
-```
+## Android 当前实现
 
 技术栈：
 
-- Kotlin
-- Jetpack Compose
-- Material 3
+- Kotlin 2.0.21
+- Jetpack Compose / Material 3
 - Navigation Compose
-- minSdk 26
-- targetSdk 35
+- Room / SQLite
+- Kotlin Coroutines
+- Android Keystore
+- minSdk 26 / targetSdk 35
 
-当前 Compose 端已经具备主要页面、导航、公共组件和 Mock Data，但视觉与功能版本仍落后于 `web-preview`。
-
-正式实现按 [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md) 推进，核心链路为：
+### 已建立的正式基础设施
 
 ```text
 Compose UI
-→ Domain / Repository
-→ Room / SQLite
-→ sync_outbox
-→ LifeTrace Cloud Auth + Sync v1
-→ PostgreSQL
-→ 其他 LifeTrace 客户端
+    ↓
+ViewModel
+    ↓
+Domain / Repository
+    ↓
+Room
+    ├── tasks
+    ├── sync_outbox
+    ├── sync_state
+    └── sync_conflicts
+    ↓
+TaskSyncCoordinator
+    ↓
+LifeTrace Sync v1
+    ├── capabilities
+    ├── snapshot
+    ├── push
+    └── pull
+    ↓
+LifeTrace Cloud / PostgreSQL
 ```
 
-## LifeTrace Cloud 对接
+### Cloud Auth
 
-主云端仓库：`zhouxingxing1279/LifeTrace`
+Android 已接入：
 
-已确认可直接复用：
+- `lifetrace-execute-android` AppId；
+- `/api/v1/auth/login`；
+- `/api/v1/auth/refresh`；
+- `/api/v1/auth/logout`；
+- access / refresh token；
+- 安装级稳定 `deviceId`；
+- Android Keystore + AES-GCM 安全会话存储；
+- HTTPS-only Cloud origin；
+- access token 过期后受控刷新并最多重放一次；
+- execution / sync / account / device 等最小必要 Scope 校验。
 
-- 原生客户端登录 `/api/v1/auth/login`
-- access / refresh token
-- Device / Session
-- `/api/v1/sync/capabilities`
-- `/api/v1/sync/push`
-- `/api/v1/sync/pull`
-- `/api/v1/sync/snapshot`
-- changeId 幂等
-- server cursor
-- optimistic conflict
-- tombstone 删除传播
-- execution task / project / calendar / memo / reminder 等双向同步实体
-- 文件元数据与 S3 兼容对象存储
+LifeTrace 主仓库已经允许 `lifetrace-execute-android` 登录并授予 Execute 所需执行域权限。
 
-Execute 1.0 还需要在 LifeTrace 主仓库补齐 execution 域强类型 DTO，并新增 `execution.important_date` 与 `execution.focus_session`。
+### Tasks 第一条正式纵向链
 
-## 当前开发阶段
+任务页运行时已经从 `MockData.todayTasks` 切换到 Room / Repository：
 
-当前执行顺序以 `docs/EXECUTION_PLAN.md` 为准：
+- 真实本地任务列表；
+- 搜索；
+- 全部 / 进行中 / 等待 / 已完成筛选；
+- 新建任务 Bottom Sheet；
+- 优先级；
+- 完成 / 恢复；
+- 删除；
+- 手动 Cloud 同步；
+- 未登录时引导进入 Cloud 连接页。
 
-1. 收敛浏览器高保真交互；
-2. 冻结 Execute 1.0 字段级领域模型；
-3. 在 LifeTrace 主仓库加固 execution Cloud contracts；
-4. Android 补齐可重复构建、本地数据库和 Repository；
-5. 接入 Cloud Auth；
-6. 实现 Local-first Outbox + Push/Pull/Snapshot/Conflict；
-7. 先以 Task 完成第一条双设备纵向同步链路；
-8. 再扩展 Project / Calendar / Collection / Review / Profile；
-9. 落地重要日期农历和番茄后台计时；
-10. 完成 Release Gate 后发布。
+本地任务写入采用同事务：
+
+```text
+Task Entity + Sync Outbox
+```
+
+Sync Coordinator 已覆盖：
+
+- 首次 Snapshot；
+- cursor Pull；
+- Outbox Push；
+- `changeId` 幂等结果；
+- accepted / duplicate；
+- conflict 持久化并阻塞同实体后续变更；
+- rejected 阻塞，不无限重试；
+- delete tombstone 下行；
+- 同一实体离线连续编辑时按队头串行发送并在服务端确认后 rebase；
+- Task 使用独立 sync scope cursor，避免未实现模块的数据被错误跳过。
+
+Cloud 页面已经提供“立即同步任务”入口和同步结果摘要。
+
+## LifeTrace Cloud
+
+正式云端仓库：`zhouxingxing1279/LifeTrace`
+
+复用能力：
+
+- Rust + Axum + PostgreSQL；
+- Auth v1；
+- Device / Session；
+- Sync v1 `capabilities / push / pull / snapshot`；
+- changeId 幂等；
+- server cursor；
+- baseServerVersion；
+- optimistic conflict；
+- tombstone；
+- execution task / project / calendar / memo / reminder 等同步实体；
+- 文件元数据与 S3 兼容对象存储。
+
+仍需要在主仓库完成：
+
+- Auth capabilities 列表显式加入 Execute Android；
+- execution 域从 RegisteredJson 逐步升级为强类型 DTO / Schema；
+- 新增 `execution.important_date`；
+- 新增 `execution.focus_session`。
+
+## 构建与验证
+
+仓库已经加入：
+
+```text
+.github/workflows/android-ci.yml
+```
+
+固定环境：
+
+- JDK 17
+- Gradle 8.10.2
+- `:app:assembleDebug`
+- `:app:testDebugUnitTest`
+- `:app:lintDebug`
+
+当前仓库仍未提交 Gradle Wrapper。CI 文件已经存在，但截至 2026-08-28 尚未观察到 GitHub Actions 运行记录，因此当前状态是 **“构建 Gate 已配置，真实构建结果待确认”**，不能标记为构建通过。
+
+Compose Preview 文件为：
+
+```text
+app/src/main/java/com/lifetrace/execute/ui/PreviewCatalog.kt
+```
+
+## 下一阶段
+
+1. 获取并修复第一次真实 Android CI 编译结果；
+2. 完成 Task 编辑、截止日期、提醒与冲突解决 UI；
+3. 补齐 Cloud Auth capabilities 的 Execute AppId；
+4. 加固 LifeTrace execution 强类型契约；
+5. 注册 `execution.important_date` / `execution.focus_session`；
+6. 将 Project / Calendar / Collection / Review 迁移到同一 Local-first 架构；
+7. 实现 Android 重要日期、公农历与提醒；
+8. 实现后台可靠番茄计时、通知和 focus_session；
+9. 完成双设备、离线、冲突、删除、Snapshot Release Gate。
