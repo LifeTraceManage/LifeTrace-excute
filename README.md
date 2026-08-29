@@ -12,14 +12,21 @@ LifeTrace Execute 是 LifeTrace 的独立执行中心 Android 客户端，负责
 
 > 功能保护规则：新增或重构时不得删除已经确认的项目、收集、复盘、我的、重要日期、番茄钟等能力。允许调整入口，但不能用“简化”为理由移除功能。
 
-## 文档
+## 文档入口
 
-- [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)：长期需求 Source of Truth。
-- [`docs/FOUNDATION_EXECUTION_PLAN.md`](docs/FOUNDATION_EXECUTION_PLAN.md)：当前最高优先级执行文档，先完成基础可用版本，禁止只铺 UI 外壳。
-- [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md)：完整长期实施计划、Cloud 架构与最终 Release Gate。
-- [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)：当前真实完成度与下一阶段。
-- [`docs/IMPLEMENTATION_LOG.md`](docs/IMPLEMENTATION_LOG.md)：工程实施记录、提交证据与已知阻塞。
-- [`docs/UI_SPEC.md`](docs/UI_SPEC.md)：视觉、导航与组件规范。
+后续开发统一从 [`docs/README.md`](docs/README.md) 进入。
+
+开发相关文档已经集中整理到 `docs/development/`：
+
+- [`docs/development/README.md`](docs/development/README.md)：开发文档阅读顺序、状态定义和维护规则；
+- [`docs/development/REQUIREMENTS.md`](docs/development/REQUIREMENTS.md)：长期需求 Source of Truth；
+- [`docs/development/FOUNDATION_EXECUTION_PLAN.md`](docs/development/FOUNDATION_EXECUTION_PLAN.md)：当前最高优先级执行文档，先完成基础可用版本，禁止只铺 UI 外壳；
+- [`docs/development/EXECUTION_PLAN.md`](docs/development/EXECUTION_PLAN.md)：完整长期实施计划、Cloud 架构与最终 Release Gate；
+- [`docs/development/PROJECT_STATUS.md`](docs/development/PROJECT_STATUS.md)：当前真实完成度与下一阶段；
+- [`docs/development/IMPLEMENTATION_LOG.md`](docs/development/IMPLEMENTATION_LOG.md)：工程实施记录、提交证据与已知阻塞；
+- [`docs/development/UI_SPEC.md`](docs/development/UI_SPEC.md)：视觉、导航与组件规范。
+
+> 开始新的开发批次前，至少阅读 `docs/README.md`、`docs/development/README.md`、`FOUNDATION_EXECUTION_PLAN.md` 和 `PROJECT_STATUS.md`。
 
 ## 固定信息架构
 
@@ -87,7 +94,7 @@ LifeTrace Sync v1
 LifeTrace Cloud / PostgreSQL
 ```
 
-当前只有 Task 已进入完整数据链；Today / Project / Calendar / Collection / Review / Profile 的大量内容仍为 Mock 或静态 UI。后续完成度统一按 `FOUNDATION_EXECUTION_PLAN.md` 的纵向闭环标准判断。
+当前只有 Task 已进入完整数据链；Today / Project / Calendar / Collection / Review / Profile 的大量内容仍为 Mock 或静态 UI。后续完成度统一按 `docs/development/FOUNDATION_EXECUTION_PLAN.md` 的纵向闭环标准判断。
 
 ### Cloud Auth
 
@@ -150,7 +157,7 @@ Android 已接入：
 
 ## 当前最高优先级
 
-按 [`docs/FOUNDATION_EXECUTION_PLAN.md`](docs/FOUNDATION_EXECUTION_PLAN.md) 执行：
+按 [`docs/development/FOUNDATION_EXECUTION_PLAN.md`](docs/development/FOUNDATION_EXECUTION_PLAN.md) 执行：
 
 1. 接通 Task 冲突处理 UI；
 2. 建立真实 Unit Test 基线；
