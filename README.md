@@ -20,7 +20,7 @@ LifeTrace Execute 是 LifeTrace 的独立执行中心 Android 客户端，负责
 
 - [`docs/development/README.md`](docs/development/README.md)：开发文档阅读顺序、状态定义和维护规则；
 - [`docs/development/REQUIREMENTS.md`](docs/development/REQUIREMENTS.md)：长期需求 Source of Truth；
-- [`docs/development/FOUNDATION_EXECUTION_PLAN.md`](docs/development/FOUNDATION_EXECUTION_PLAN.md)：当前最高优先级执行文档，先完成基础可用版本，禁止只铺 UI 外壳；
+- [`docs/development/FOUNDATION_EXECUTION_PLAN.md`](docs/development/FOUNDATION_EXECUTION_PLAN.md)：当前最高优先级的 **全功能 1.0 交付执行文档**，按 Phase Gate 连续推进直到所有已确认功能真实实现；
 - [`docs/development/EXECUTION_PLAN.md`](docs/development/EXECUTION_PLAN.md)：完整长期实施计划、Cloud 架构与最终 Release Gate；
 - [`docs/development/PROJECT_STATUS.md`](docs/development/PROJECT_STATUS.md)：当前真实完成度与下一阶段；
 - [`docs/development/IMPLEMENTATION_LOG.md`](docs/development/IMPLEMENTATION_LOG.md)：工程实施记录、提交证据与已知阻塞；
@@ -151,23 +151,25 @@ Android 已接入：
 - `:app:testDebugUnitTest`
 - `:app:lintDebug`
 
-截至 2026-08-28，`main` 最新提交 `b190bce3e3d3b82b914ddff952bec8c69d59a8ba` 的 Android CI run `33135872033` 已成功完成。
+截至 2026-08-28，代码基线提交 `b190bce3e3d3b82b914ddff952bec8c69d59a8ba` 的 Android CI run `33135872033` 已成功完成。
 
 但当前仓库还没有 `app/src/test`，因此下一阶段必须建立真实业务单测，不能只以 Gradle test task PASS 作为质量完成证据。
 
 ## 当前最高优先级
 
-按 [`docs/development/FOUNDATION_EXECUTION_PLAN.md`](docs/development/FOUNDATION_EXECUTION_PLAN.md) 执行：
+按 [`docs/development/FOUNDATION_EXECUTION_PLAN.md`](docs/development/FOUNDATION_EXECUTION_PLAN.md) 连续执行，目标是完成当前规划内全部功能：
 
-1. 接通 Task 冲突处理 UI；
-2. 建立真实 Unit Test 基线；
-3. 抽取可扩展 Sync Core；
-4. Project 完整纵向实现并接 Task 归属；
-5. Today 改为真实数据聚合；
-6. Calendar + Important Date；
-7. Collection 最小可用闭环；
-8. Review 持久化；
-9. Reminder + Pomodoro；
-10. Profile / Sync 可观测性与双设备 E2E。
+1. F0：Task 冲突闭环 + 真实测试基线；
+2. F1：Generic Sync Core + Execution Contracts；
+3. F2：Project 完整纵向链；
+4. F3：Task recurrence / occurrence / waiting / reminder / dependency / completion / subtask；
+5. F4：Calendar + Important Date + Reminder / Notification；
+6. F5：Collection 六类入口 + Tags + Files + Voice；
+7. F6：Daily Review + Weekly Review；
+8. F7：Goal / Habit 正式接入；
+9. F8：Pomodoro / FocusSession；
+10. F9：Today 最终真实聚合；
+11. F10：Profile / Devices / Settings / Data；
+12. F11：全实体 Sync / Offline / 双设备 E2E / Release。
 
-基础版本的完成定义是：**生产路径无 MockData、核心按钮无空操作、核心数据可持久化/离线/同步，并有真实自动化测试。**
+1.0 的完成定义是：**所有已确认功能均形成真实纵向闭环，生产路径无 MockData、核心按钮无空操作、核心数据可持久化/离线运行、需要同步的实体全部可跨设备同步，并有真实自动化测试与发布证据。**
