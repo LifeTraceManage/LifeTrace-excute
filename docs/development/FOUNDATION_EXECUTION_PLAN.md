@@ -1,406 +1,528 @@
-# LifeTrace Execute 基础可用版本执行文档
+# LifeTrace Execute 全功能交付执行文档
 
-更新时间：2026-08-29
+更新时间：2026-08-30
 
-> 本文档基于 `main` 分支当前代码进行重新盘点，目标不是继续增加页面数量，而是把 LifeTrace Execute 从“高保真 UI + 单一 Task 纵向链”推进为**可以真实日常使用的 Android 执行工具**。
+> 文件名继续保留 `FOUNDATION_EXECUTION_PLAN.md`，用于兼容仓库现有文档入口与 `AGENTS.md`。从本次更新开始，本文不再只定义“基础可用版本”，而是作为 **LifeTrace Execute 全功能 1.0 的当前最高优先级执行计划**。
 >
-> 核心原则：**一个功能只有完成 Domain → Room → Repository → UI → 离线/Sync → Test 的纵向闭环，才记为“已实现”。只有 Compose 页面、MockData、静态数字或空 `onClick` 不计入完成度。**
+> 本轮目标：把当前“Cloud/Sync 基础设施 + Task 单模块 + 多个高保真 UI 外壳”推进为一个可以长期真实使用、完整离线、完整同步、可发布的 Android 执行中心。
+>
+> **全部功能**的边界定义为：`REQUIREMENTS.md`、`UI_SPEC.md`、`EXECUTION_PLAN.md` 中已经确认、已经设计或已经进入正式规划的 1.0 能力全部实现。已经确认的功能不得再以“首版先不做”“以后补”“先做外壳”为理由跳过；尚未登记的未来设想不自动扩大 1.0 范围。
 
 ---
 
-## 1. 当前项目真实状态
+## 0. 执行总原则
 
-### 1.1 已经真正落地的部分
+### 0.1 功能完成不是页面完成
 
-当前 Android 项目已经具备一批有价值的底层基础设施，这些代码应继续复用，而不是推倒重来。
+一个业务模块只有形成下面的纵向闭环，才允许标记为 `已完成`：
 
-#### Cloud Auth / Session
+```text
+Requirement / Product Rule
+        ↓
+Domain Model / Business Rule
+        ↓
+Room Entity / DAO / Migration
+        ↓
+Repository / UseCase
+        ↓
+ViewModel / UI State
+        ↓
+Compose UI / Real Interaction
+        ↓
+Offline Behavior
+        ↓
+Sync / File / Notification（适用时）
+        ↓
+Automated Tests
+        ↓
+CI / Smoke / E2E Evidence
+```
 
-已存在：
+以下情况一律不计为功能完成：
+
+- 只有 Compose 页面；
+- 仍依赖 `MockData`；
+- 使用固定用户名、固定日期、固定统计数字代替真实数据；
+- 核心按钮仍是空 `onClick = {}`；
+- 使用 `remember` 保存需要跨页面/重启保留的业务数据；
+- 只写 Room 但没有 Repository / UI；
+- 需要同步的实体没有 Outbox / Sync；
+- 修改 Room Schema 却没有 Migration；
+- `testDebugUnitTest` PASS 但没有真实业务测试；
+- 只在单设备工作，没有验证离线/同步/删除/冲突。
+
+### 0.2 不再采用“最小版功能裁剪”
+
+之前基础计划中存在“先支持文本/想法/链接”“提醒先做基础版”等阶段性最小范围。从本次更新开始：
+
+- 阶段可以分批实现；
+- **最终 1.0 Gate 不允许裁剪已确认功能**；
+- 图片、文件、语音收集必须完成；
+- Task recurrence / occurrence / waiting / reminder / completion / dependency 必须完成；
+- 重要日期公历/农历/闰月必须完成；
+- 番茄钟后台、进程恢复、通知、历史必须完成；
+- Profile 中设备、同步、通知、外观、数据管理必须形成真实行为；
+- 每日复盘、历史复盘以及已规划的周复盘必须完成；
+- 多实体、多设备、离线和冲突必须完成。
+
+### 0.3 不复制第二套架构
+
+继续复用：
+
+- LifeTrace Cloud；
+- Auth v1；
+- Sync v1；
+- Room；
+- Outbox；
+- WorkManager；
+- Android Keystore；
+- Cloud 文件 API / 对象存储；
+- 主仓库已有的 execution contract / registry。
+
+禁止为 Project、Memo、Calendar 等实体各复制一套独立 Sync Coordinator。
+
+---
+
+## 1. 当前代码事实基线
+
+### 1.1 已经真正落地
+
+当前 Android 已有正式基础设施：
 
 - `lifetrace-execute-android` AppId；
-- LifeTrace Cloud 登录、刷新、退出；
-- access token / refresh token；
+- LifeTrace Cloud 登录 / refresh / logout；
 - Android Keystore + AES-GCM 会话保护；
-- 安装级稳定 `deviceId`；
-- HTTPS-only Cloud origin；
-- Sync capabilities / schema capability 校验；
-- 登录后首次 Task Sync 调度。
+- installation-level 稳定 `deviceId`；
+- HTTPS Cloud origin 校验；
+- Sync capability / schema capability 校验；
+- Room 数据库；
+- `sync_outbox` / `sync_state` / `sync_conflicts`；
+- WorkManager 后台同步；
+- Task CRUD；
+- Task 状态 / 优先级 / 描述 / scheduledAt / dueAt；
+- Task 搜索 / 筛选；
+- Task Snapshot / Push / Pull；
+- accepted / duplicate / conflict / rejected；
+- tombstone；
+- 同实体连续修改 rebase；
+- Task Conflict Resolver / Bottom Sheet / ViewModel action 基础设施。
 
-这部分已经超过 UI 原型阶段，是正式基础设施。
+Task 是目前唯一接近正式纵向闭环的业务模块。
 
-#### Room / Local-first 基础
+### 1.2 尚未形成完整业务闭环
 
-当前 Room 数据库包含：
+当前仍需要重点完成：
+
+- Task Conflict UI 最终接通；
+- Project；
+- Task 高级能力；
+- Calendar / CalendarEvent / occurrence；
+- Important Date；
+- Reminder / Android Notification；
+- Collection / Memo / Tags / Files / Voice；
+- Daily Review / Weekly Review；
+- Goal / Habit 与 Today 聚合；
+- Pomodoro / FocusSession；
+- Today 真实聚合；
+- Profile / Devices / Settings / Data Management；
+- Generic Multi-entity Sync；
+- 真实 Unit / DB / UI / E2E 测试；
+- Release 构建与发布 Gate。
+
+### 1.3 当前产品判断
+
+> 当前项目是 **“正式 Cloud/Auth/Sync 基础设施 + Task 第一条纵向链 + 其余主要页面高保真外壳”**，不是完整产品。
+
+后续开发按本文 Phase Gate 推进，不再以“页面数量”衡量完成度。
+
+---
+
+## 2. LifeTrace Execute 1.0 全功能范围
+
+以下能力全部属于 1.0 Release Scope。
+
+### 2.1 Cloud / Account / Local-first
+
+必须完成：
+
+- 登录；
+- access token / refresh token；
+- token 受控刷新；
+- logout；
+- 稳定 deviceId；
+- Secure Session；
+- HTTPS-only；
+- 多账号数据隔离；
+- Local-first CRUD；
+- Outbox；
+- Snapshot；
+- Push；
+- Pull；
+- changeId 幂等；
+- baseServerVersion conflict；
+- tombstone；
+- rejected / retryable 分类；
+- 网络恢复自动同步；
+- App 启动 / 前台 / 登录后 / 本地写入 / 周期性同步；
+- 手动同步；
+- 新设备全量恢复；
+- 本地 DB 可从 Cloud 重建。
+
+### 2.2 Today / 今天
+
+Today 必须成为真实聚合页，而不是单独维护一份 Today 数据。
+
+实现：
+
+- 当前用户真实问候信息；
+- 系统真实日期 / 时区；
+- 一周日期条；
+- 今日焦点；
+- 今日概览；
+- 今日任务；
+- 逾期未完成任务；
+- 今日安排任务；
+- 当前进行中任务；
+- Calendar Event / occurrence；
+- 重要日期；
+- 项目摘要；
+- 习惯 / 目标执行信息；
+- 今日专注统计；
+- 今日完成统计；
+- 复盘入口与复盘摘要；
+- 在 Today 直接完成/恢复任务；
+- 点击进入 Task / Project / Calendar / Review 对应详情。
+
+所有统计必须由 Repository 数据实时计算。
+
+### 2.3 Tasks / 任务
+
+完整范围：
+
+- 新建 / 查看 / 编辑 / 删除；
+- TODO / 进行中 / 等待 / 已完成；
+- 优先级；
+- 描述 / 备注；
+- 项目归属；
+- scheduledAt；
+- dueAt；
+- Reminder；
+- recurrence rule；
+- task occurrence；
+- waiting item；
+- completion result；
+- task dependency；
+- 子任务能力；
+- 搜索；
+- 状态筛选；
+- 项目筛选；
+- 时间/优先级筛选；
+- 离线 CRUD；
+- Cloud Sync；
+- 冲突处理；
+- 删除 tombstone；
+- 番茄钟关联任务。
+
+Cloud 相关实体优先复用：
+
+```text
+execution.task
+execution.recurrence_rule
+execution.task_occurrence
+execution.waiting_item
+execution.reminder
+execution.completion_result
+execution.task_dependency
+execution.entity_link
+```
+
+子任务关系必须使用明确的领域关系/契约实现，不能只在 UI 中缩进展示假数据。
+
+### 2.4 Projects / 项目
+
+完整范围：
+
+- 新建 / 查看 / 编辑 / 删除；
+- 进行中 / 暂停 / 完成 / 归档；
+- 标题；
+- 描述；
+- 开始时间；
+- 截止时间；
+- 项目任务列表；
+- Task 项目归属编辑；
+- 项目进度；
+- 任务完成数 / 总数；
+- 项目归档；
+- 项目删除后的 Task 关系处理；
+- 离线；
+- Cloud Sync；
+- 冲突；
+- tombstone。
+
+进度能从任务推导时，不维护第二份容易冲突的进度真值。
+
+项目成员/协作信息只有在存在真实 Cloud contract 与数据源时显示；禁止使用 Mock 成员头像制造“已支持协作”的假象。
+
+### 2.5 Calendar / 日历
+
+完整范围：
+
+- `YearMonth` 驱动真实月视图；
+- 正确月份天数；
+- 正确星期偏移；
+- 上月 / 下月；
+- 回到今天；
+- 选择日期；
+- 有内容日期 marker；
+- Calendar Event CRUD；
+- all-day / timed event；
+- Calendar occurrence；
+- Task scheduled / due 映射；
+- Reminder；
+- Important Date marker；
+- 选中日的统一时间线；
+- 离线；
+- Cloud Sync；
+- 冲突与删除。
+
+### 2.6 Important Dates / 重要日期
+
+必须全部支持：
+
+- 生日；
+- 纪念日；
+- 里程碑；
+- 其他；
+- 单次公历；
+- 每年公历；
+- 单次农历；
+- 每年农历；
+- 农历年份；
+- 农历月 / 日；
+- 闰月；
+- 启用 / 停用；
+- Reminder；
+- 新增 / 编辑 / 删除；
+- 当年公历派生日期；
+- 日历 marker；
+- 近期重要日期；
+- 多端同步。
+
+农历原始字段是 Source of Truth。必须使用经过验证的农历转换实现，并建立 golden vectors。
+
+Cloud entity：`execution.important_date`。
+
+### 2.7 Collection / 收集
+
+UI 中已有的六类快速收集全部实现：
+
+- 文本；
+- 图片；
+- 语音；
+- 链接；
+- 文件；
+- 想法。
+
+同时完成：
+
+- Inbox；
+- 类型筛选；
+- Memo CRUD；
+- 标签；
+- 标签关系；
+- 归档；
+- 删除；
+- 转任务；
+- 文件/图片/语音上传状态；
+- 上传失败重试；
+- 离线创建文本类内容；
+- 网络恢复后同步/上传；
+- 多端同步。
+
+结构优先复用：
+
+```text
+execution.memo
+execution.memo_tag
+execution.memo_tag_relation
+execution.entity_link
+file.metadata
+/api/v1/files
+```
+
+图片、语音、大文件内容本身不得塞进 Sync JSON；Sync 只保存业务元数据与文件引用。
+
+### 2.8 Review / 复盘
+
+完整范围：
+
+#### Daily Review
+
+- 今日评分；
+- 心情；
+- 今日收获；
+- 改进项；
+- 明日第一优先级 / 明日计划；
+- 当日真实任务统计；
+- 保存；
+- 再次打开读取；
+- 编辑；
+- 历史列表；
+- 历史详情；
+- 离线；
+- Cloud Sync；
+- 冲突处理。
+
+优先复用 LifeTrace 已有 `review.daily`。
+
+#### Weekly Review
+
+既然 Cloud 已注册 `execution.weekly_review`，1.0 同步实现：
+
+- 周期选择；
+- 本周完成摘要；
+- 本周收获；
+- 问题/改进；
+- 下周重点；
+- 保存 / 编辑 / 历史；
+- Cloud Sync。
+
+### 2.9 Goals / Habits 与执行聚合
+
+长期执行计划已经要求 Today 展示 habit / goal 信息。正式实现时：
+
+1. 先确认 LifeTrace 主仓库现有 Goal / Habit contract 与数据归属；
+2. 能复用现有 LifeTrace 领域实体时直接复用；
+3. 禁止为了 Execute 再创建一套重复 Habit/Goal 后端；
+4. Today 展示真实今日习惯完成情况与目标/焦点摘要；
+5. 对用户可操作的完成动作必须真实持久化并同步；
+6. 如果当前 Cloud 缺少所需 contract，先在 LifeTrace contracts 补齐并完成 contract test，再接 Android。
+
+Cloud 已存在 `execution.goal` 时优先复用其明确契约；Habit 则以主仓库真实 contract 为准。
+
+### 2.10 Pomodoro / Focus
+
+完整范围：
+
+- 25/5；
+- 50/10；
+- 用户默认时长偏好；
+- 开始；
+- 暂停；
+- 继续；
+- 重置；
+- focus / break phase；
+- 当前轮次；
+- 今日完成番茄数；
+- 关联 Task；
+- 页面切换不丢状态；
+- App 后台；
+- 锁屏；
+- 系统回收后恢复；
+- 时间校准；
+- 完成通知；
+- 中断状态；
+- FocusSession 历史；
+- 今日专注统计；
+- 多端同步。
+
+计时 Source of Truth 必须基于 `startedAt / expectedEnd / pausedAt / remainingWhenPaused` 等持久化状态恢复，而不是依赖每秒 coroutine 持续存活。
+
+Cloud entity：`execution.focus_session`。
+
+### 2.11 Reminder / Notification
+
+Reminder 不只是一个字段，必须形成 Android 系统行为：
+
+- Android 13+ 通知权限；
+- Notification Channel；
+- Task reminder；
+- Calendar reminder；
+- Important Date reminder；
+- Pomodoro completion notification；
+- schedule；
+- cancel；
+- reschedule；
+- 重启后恢复；
+- 时区/时间变化后重算；
+- 通知点击进入正确业务页面；
+- 用户通知偏好。
+
+首要目标是可靠性；只有确实需要严格 exact alarm 的场景才引入额外权限和合规处理。
+
+### 2.12 Profile / My / Settings
+
+“我的”必须成为真实设置与数据中心：
+
+- 真实 displayName；
+- 真实 email；
+- Cloud 登录状态；
+- 当前设备；
+- Device 列表；
+- 设备撤销；
+- 最后同步时间；
+- pending outbox 数；
+- blocked 数；
+- conflict 数；
+- 手动同步；
+- 全量重新同步；
+- 冲突列表；
+- 冲突详情与解决；
+- 通知设置；
+- 外观设置；
+- 通用设置；
+- 用户偏好；
+- 数据管理；
+- 隐私导出；
+- 账号删除；
+- 退出当前设备；
+- 关于；
+- App version / build 信息。
+
+任何暂时没有后端能力的操作不得伪装成功。需要 Cloud 支持时必须真实调用 Cloud 并展示实际结果。
+
+---
+
+## 3. 数据与同步目标架构
+
+### 3.1 Room 业务数据
+
+最终至少覆盖：
 
 ```text
 tasks
+projects
+recurrence_rules
+task_occurrences
+waiting_items
+task_dependencies
+calendar_events
+calendar_occurrences
+important_dates
+memos
+memo_tags
+memo_tag_relations
+reminders
+completion_results
+daily_reviews
+weekly_reviews
+focus_sessions
+preferences_cache
+
+# 根据 LifeTrace 真实 Goal/Habit contract 增加对应本地表/映射
+```
+
+同步基础表继续共享：
+
+```text
 sync_outbox
 sync_state
 sync_conflicts
 ```
 
-Task 写入与 Outbox 已使用同一事务，这是正确的 Local-first 方向。
+### 3.2 Generic Sync Core
 
-#### Task 第一条正式纵向链
-
-Task 当前已经具备：
-
-- Room Flow 列表；
-- 新建 / 编辑 / 删除；
-- 标题 / 描述；
-- TODO / 进行中 / 等待 / 已完成；
-- 优先级；
-- `scheduledAt` / `dueAt`；
-- 本地时间选择、UTC Instant 持久化；
-- 搜索 / 筛选；
-- 本地写入后进入 Outbox；
-- Snapshot / Push / Pull；
-- accepted / duplicate / rejected；
-- conflict 持久化；
-- tombstone 下行删除；
-- WorkManager 后台同步；
-- 手动同步。
-
-这部分是当前产品中唯一接近“真实业务模块”的能力。
-
-#### Task 冲突基础设施
-
-当前代码已经存在：
-
-```text
-TaskConflictResolver.kt
-TaskConflictResolutionSheet.kt
-TasksViewModel.keepServer()
-TasksViewModel.keepLocal()
-```
-
-但 `TasksScreen` 目前没有真正打开 `TaskConflictResolutionSheet`，因此当前仍属于“后台逻辑存在、用户闭环未完成”。
-
-#### CI
-
-当前 `Android CI` 已对最新 `main` 提交执行：
-
-```text
-assembleDebug
-testDebugUnitTest
-lintDebug
-```
-
-最新 `b190bce...` workflow 成功。
-
-但需要特别说明：当前仓库没有 `app/src/test`，因此 `testDebugUnitTest` 成功目前主要表示 Gradle 测试任务可执行，**不能等同于业务逻辑已经被单元测试覆盖**。
-
----
-
-### 1.2 当前仍属于 UI 外壳的模块
-
-#### Today
-
-当前 Today 页面仍使用：
-
-- 固定用户名 `Alex`；
-- 固定日期；
-- 固定统计数字；
-- `MockData.timeline`；
-- `MockData.todayTasks`。
-
-所以 Today 目前不是“今日执行中心”，只是视觉稿。
-
-#### Projects
-
-当前 Projects：
-
-- 数据来自 `MockData.projects`；
-- “新建项目”按钮 `onClick = {}`；
-- 没有 Project Domain；
-- 没有 Project Room Entity；
-- 没有 Project Repository；
-- 没有 Project ViewModel；
-- 没有 Project Sync。
-
-因此 Project 当前基本为纯外壳。
-
-#### Calendar
-
-当前 Calendar：
-
-- 固定显示 `2026年8月`；
-- 简单 `(1..31)` 生成日期；
-- 不处理真实星期偏移；
-- 不支持月份切换；
-- 日程仍来自 `MockData.timeline`；
-- 没有 CalendarEvent / ImportantDate 数据层。
-
-所以当前不是实际可使用的日历。
-
-#### Collection
-
-当前 Collection：
-
-- 文本 / 图片 / 语音 / 链接 / 文件 / 想法入口全部为空点击；
-- 收集箱数字来自 `MockData.captureBuckets`；
-- 没有 memo / collection 本地实体；
-- 没有持久化与同步。
-
-因此当前完全不能执行真实“收集”。
-
-#### Review
-
-当前 Review：
-
-- 输入只保存在 Compose `remember`；
-- 点击“完成复盘”直接返回；
-- 不写数据库；
-- 不同步；
-- 完成任务数字为固定值；
-- 心情评分图标没有可选择状态。
-
-因此 Review 当前数据会随页面销毁而丢失。
-
-#### Profile
-
-Cloud Connection 是真实功能，但 Profile 本身：
-
-- 头像、用户名、邮箱仍为静态样例；
-- 大多数设置卡片没有真实导航或操作；
-- 设备管理、通知设置、数据管理等仍为空壳。
-
----
-
-## 2. 当前完成度判断
-
-以下为工程判断，不是自动统计指标。
-
-| 模块 | 当前状态 | 判断 |
-| --- | --- | --- |
-| Cloud Auth / Secure Session | 已有正式代码 | 基础可用，需 E2E |
-| Local-first / Outbox | Task 已落地 | 架构方向正确 |
-| Task CRUD | 已进入正式链路 | 中高完成度 |
-| Task Conflict | 数据层基本完成 | UI 未闭环 |
-| Project | Mock UI | 基本未实现 |
-| Today | Mock 聚合页 | 基本未实现 |
-| Calendar | 静态月历 | 基本未实现 |
-| Important Date | Web 设计 + Cloud entity | Android 未实现 |
-| Collection | Mock UI | 未实现 |
-| Review | 临时表单 | 未实现 |
-| Pomodoro | Web 设计 + Cloud entity | Android 未实现 |
-| Profile / Device | Cloud 入口真实，其余大多静态 | 低完成度 |
-| Unit Tests | 无 `app/src/test` | 未建立有效测试基线 |
-| Release | CI Debug Gate 有效 | 未达到发布条件 |
-
-当前项目更准确的描述应是：
-
-> **“底层 Auth / Sync 基础设施 + Task 单模块原型已经成型，但产品级基础功能尚未形成。”**
-
-不能因为五个一级页面都能打开，就把这些页面计入实际功能完成度。
-
----
-
-## 3. 基础可用版本 Definition of Done
-
-本轮不以“所有高级需求一次做完”为目标，而是先做出一个**每天可以真实使用**的版本。
-
-基础可用版本必须满足：
-
-### 3.1 业务层
-
-1. 用户可以真实创建、修改、完成、删除任务；
-2. 用户可以真实创建项目，并把任务归属项目；
-3. “今天”展示真实的今日任务、逾期任务、今日安排，而不是 MockData；
-4. 日历能显示真实月份和真实日期，并展示任务/事件；
-5. 用户至少能进行文本、想法、链接三类快速收集；
-6. 每日复盘可以保存，并能再次读取；
-7. Task 冲突可以由用户选择“接受云端”或“保留本地”；
-8. 基础提醒可以产生 Android 通知；
-9. 重要日期可以新增、编辑、删除并出现在日历；
-10. 番茄钟至少完成开始、暂停、恢复、重置、后台恢复与完成记录。
-
-### 3.2 数据层
-
-上述所有核心业务都必须满足：
-
-```text
-Domain Model
-    ↓
-Room Entity / DAO
-    ↓
-Repository
-    ↓
-ViewModel
-    ↓
-Compose UI
-```
-
-需要云同步的实体继续增加：
-
-```text
-Repository Local Write
-    ↓ 同一事务
-Entity + Sync Outbox
-    ↓
-Sync Engine
-    ↓
-LifeTrace Cloud
-```
-
-### 3.3 质量层
-
-- 生产路径禁止依赖 `MockData`；
-- 核心按钮禁止空 `onClick = {}`；
-- App 重启后数据不丢失；
-- 首次登录成功后，断网仍能操作核心数据；
-- 网络恢复后自动同步；
-- 至少建立真实 Repository / Mapper / Conflict / Date Logic 单测；
-- CI 必须运行到真实测试，不允许“0 个业务测试但显示 PASS”作为完成证据。
-
----
-
-## 4. 执行原则
-
-### 原则 1：停止继续铺 UI 外壳
-
-在 Foundation Gate 完成前，不再新增只有视觉效果的新页面。
-
-每完成一个模块，必须同时补齐数据和行为闭环。
-
-### 原则 2：第二个业务实体上线前先把 Sync 从 Task 专用改成可扩展
-
-当前 `TaskSyncCoordinator` 将：
-
-- entity type；
-- snapshot；
-- pull apply；
-- accepted apply；
-- conflict；
-
-全部硬编码为 `execution.task`。
-
-如果直接复制一份 `ProjectSyncCoordinator`、`MemoSyncCoordinator`，很快会出现大量重复和一致性问题。
-
-因此 Project 正式同步前，先抽取：
-
-```text
-SyncEngine
-├── SyncScope / EntityType
-├── SyncEntityHandler
-├── Outbox Push
-├── Pull
-├── Snapshot
-├── Conflict Store
-└── Retry Policy
-
-TaskSyncHandler
-ProjectSyncHandler
-CalendarSyncHandler
-MemoSyncHandler
-ReviewSyncHandler
-```
-
-Outbox / SyncState / SyncConflict 继续共享。
-
-### 原则 3：不把 UI 状态当业务数据
-
-`remember { mutableStateOf(...) }` 只能用于暂时的界面状态。
-
-以下内容必须进入 Repository / Room：
-
-- 任务；
-- 项目；
-- 日程；
-- 重要日期；
-- 收集内容；
-- 复盘；
-- FocusSession；
-- 用户业务偏好。
-
-### 原则 4：所有“可点击”必须有结果
-
-如果功能未实现：
-
-- 不允许保留看似可用但无响应的按钮；
-- 可以显示“后续版本”或 disabled 状态；
-- 核心流程按钮必须真实工作。
-
----
-
-## 5. Phase F0：修正当前 Task 闭环 + 建立测试基线
-
-这是第一优先级，不新增新模块。
-
-### F0-1 接通 Task Conflict UI
-
-需要完成：
-
-- `TasksScreen` 增加冲突处理入口；
-- 打开现有 `TaskConflictResolutionSheet`；
-- 连接 `keepServer()`；
-- 连接 `keepLocal()`；
-- 冲突处理完成后 UI 自动刷新；
-- 保留本地后自动 enqueue sync；
-- 无冲突时入口隐藏。
-
-验收：
-
-```text
-A 设备修改任务
-B 设备修改同一任务并先同步
-A 再同步
-→ 出现冲突
-→ 用户可以选择接受云端或保留本地
-→ 处理后该实体不再 blocked
-```
-
-### F0-2 建立真实单元测试目录
-
-新增：
-
-```text
-app/src/test/java/com/lifetrace/execute/
-```
-
-第一批必须测试：
-
-- `TaskWireMapper` serialize / deserialize；
-- nullable 字段；
-- status / priority wire value；
-- `TaskRepository` create / update / delete + Outbox；
-- Task localVersion 递增；
-- conflict keepServer；
-- conflict keepLocal rebase；
-- accepted 后下一条 Outbox rebase；
-- 日期/时区辅助逻辑。
-
-需要使用 Room in-memory test DB 或 repository fake DAO，确保测试真正验证本地事务行为。
-
-### F0-3 文档状态校准
-
-同步修复：
-
-- README 中过时的 CI 描述；
-- PROJECT_STATUS 中冲突 UI 状态；
-- IMPLEMENTATION_LOG 中已实现但未接通的能力。
-
-#### F0 Gate
-
-只有以下全部满足才进入 Project：
-
-- Task 冲突 UI 可操作；
-- 至少存在真实业务单测；
-- assembleDebug PASS；
-- testDebugUnitTest PASS；
-- lintDebug PASS；
-- Task CRUD / offline / conflict smoke PASS。
-
----
-
-## 6. Phase F1：抽取可扩展 Sync Core
-
-目标：避免每新增一个实体复制整套 Task 同步器。
-
-### 6.1 目标结构
-
-建议：
+在第二个正式同步实体大规模接入前，将当前 Task 专用同步逻辑抽取为：
 
 ```text
 data/sync/
@@ -411,348 +533,271 @@ data/sync/
 ├── SyncWorker.kt
 ├── ConflictRepository.kt
 └── handlers/
-    └── TaskSyncHandler.kt
+    ├── TaskSyncHandler.kt
+    ├── ProjectSyncHandler.kt
+    ├── CalendarEventSyncHandler.kt
+    ├── ImportantDateSyncHandler.kt
+    ├── MemoSyncHandler.kt
+    ├── ReminderSyncHandler.kt
+    ├── ReviewSyncHandler.kt
+    ├── FocusSessionSyncHandler.kt
+    └── ...
 ```
 
-### 6.2 `SyncEntityHandler` 职责
-
-每个业务实体只负责：
-
-- `entityType`；
-- snapshot item 如何写入 Room；
-- pull upsert 如何写入 Room；
-- pull delete 如何删除本地；
-- accepted 如何更新 `serverVersion`；
-- rebase 时如何重新生成 payload。
-
-通用 Sync Engine 负责：
+Sync Engine 统一负责：
 
 - session；
-- push batching；
-- retry；
-- snapshot pagination；
+- capabilities；
+- push batch；
+- pull；
+- snapshot；
 - cursor；
-- conflict 持久化；
-- rejected blocked；
-- WorkManager。
+- retry；
+- conflict store；
+- blocked / rejected；
+- tombstone；
+- WorkManager；
+- single-flight。
 
-### 6.3 Scope 策略
+Entity Handler 只负责：
 
-不要在全模块完成前直接使用一个“全 execution cursor”。
+- `entityType`；
+- payload mapper；
+- snapshot apply；
+- pull upsert/delete；
+- accepted serverVersion；
+- rebase payload。
 
-可以继续使用实体 scope：
+### 3.3 Cloud Contract 前置 Gate
 
-```text
-entities:execution.task
-entities:execution.project
-entities:execution.calendar_event
-entities:execution.important_date
-entities:execution.memo
-...
-```
+正式接入某个 entity 前必须确认：
 
-等实体处理器全部稳定后，再评估合并 scope。
+- registry 已注册；
+- capabilities 能发现；
+- typed DTO / schema 明确；
+- schemaVersion 策略明确；
+- required field 可验证；
+- Android mapper 有 contract test。
 
-#### F1 Gate
-
-- Task 行为与重构前一致；
-- Task Snapshot / Push / Pull / Conflict tests 继续通过；
-- 新增第二个 Handler 不需要复制整个 Coordinator。
-
----
-
-## 7. Phase F2：Project 完整纵向实现
-
-Project 是 Task 之后最优先的业务实体，因为 Task 已经预留 `projectId`。
-
-### 7.1 Domain
-
-建议最小模型：
-
-```text
-ExecutionProject
-- id
-- userId
-- title
-- description
-- status: active / paused / done / archived
-- startAt?
-- dueAt?
-- createdAt
-- updatedAt
-- localVersion
-- serverVersion?
-- modifiedByDevice?
-```
-
-### 7.2 Room
-
-新增：
-
-```text
-projects
-```
-
-并升级 Room database version，建立正式 migration。
-
-从这一阶段开始禁止通过 destructive migration 逃避 schema migration。
-
-### 7.3 Repository
-
-实现：
-
-- observeProjects；
-- createProject；
-- updateProject；
-- pause / resume；
-- complete；
-- archive；
-- delete；
-- Project + Outbox 同事务。
-
-### 7.4 UI
-
-替换 `MockData.projects`：
-
-- 项目列表来自 Room Flow；
-- 新建项目可用；
-- 编辑项目可用；
-- 状态筛选可用；
-- 项目详情显示真实任务；
-- 项目进度从 `linkedTasks.done / linkedTasks.total` 计算，不使用静态 Float。
-
-### 7.5 Task 联动
-
-Task 编辑页增加 Project 选择：
-
-- 可选“无项目”；
-- 可选 active project；
-- 修改后更新 Task Outbox dependencies；
-- Project 删除/归档时定义任务关系处理策略。
-
-#### F2 Gate
-
-```text
-新建 Project
-→ 新建 Task 并选择 Project
-→ Project 页面看到该 Task
-→ 完成 Task
-→ Project 进度实时变化
-→ App 重启数据仍存在
-→ 断网修改后恢复网络可同步
-```
+`execution.important_date`、`execution.focus_session` 以及当前仍为 RegisteredJson 的 execution entity 必须在 LifeTrace 主仓库完成契约加固，不能依赖“任意 JSON 能存进去”作为正式实现。
 
 ---
 
-## 8. Phase F3：把 Today 变成真实执行中心
+## 4. 全功能开发 Phase
 
-Today 不能单独维护一套数据，必须是现有业务数据的聚合视图。
+后续 Agent/Codex 必须按顺序推进。一个 Phase Gate 未通过时，不得为了“看起来进度快”跳去铺后面的 UI 外壳。
 
-### 8.1 Today Query
+## Phase F0：Task 现有闭环 + 真实测试基线
 
-至少聚合：
+### 实现
 
-- `scheduledAt` 在今天的任务；
-- `dueAt` 在今天的任务；
-- 已逾期未完成任务；
-- IN_PROGRESS 任务；
-- 今日 calendar events；
-- 今日 important dates；
-- active projects 摘要。
+- 将 `TaskConflictResolutionSheet` 真正接入 `TasksScreen`；
+- 连接 `keepServer()` / `keepLocal()`；
+- 冲突处理后解除 blocked；
+- keepLocal 自动重新排队同步；
+- 建立 `app/src/test`；
+- Task Mapper 测试；
+- Repository CRUD + Outbox 事务测试；
+- localVersion / serverVersion 测试；
+- accepted rebase；
+- conflict keepServer / keepLocal；
+- date/time helper 测试。
 
-### 8.2 去除静态内容
+### Gate
 
-删除生产路径中的：
-
-- 固定 `Alex`；
-- 固定 `8月27日`；
-- 固定 `8 / 3 / 2`；
-- `MockData.timeline`；
-- `MockData.todayTasks`。
-
-用户名读取当前 Cloud session；日期读取系统时间与用户时区。
-
-### 8.3 Today 交互
-
-用户必须可以直接在 Today：
-
-- 完成任务；
-- 打开任务详情；
-- 查看逾期；
-- 进入项目；
-- 进入日历事件；
-- 进入每日复盘。
-
-#### F3 Gate
-
-Today 页所有数字和列表都能通过真实 Room 数据变化而实时更新。
+- Task CRUD 真机可用；
+- 离线 CRUD 可用；
+- 冲突 UI 可解决；
+- 真实业务单测存在；
+- `assembleDebug` PASS；
+- `testDebugUnitTest` PASS；
+- `lintDebug` PASS。
 
 ---
 
-## 9. Phase F4：真实 Calendar + Important Date
+## Phase F1：Generic Sync Core + Execution Contracts
 
-### 9.1 Calendar 基础
+### 实现
 
-使用 `java.time.YearMonth` 正确生成月历：
+- 从 `TaskSyncCoordinator` 抽取 Generic Sync Engine；
+- Task 切换到 `TaskSyncHandler` 后行为不回退；
+- 建立 Sync Registry；
+- 统一多 entity scheduler；
+- 明确 entity-scope cursor；
+- 完成 execution typed contract / schema 补强；
+- Android contract mapper tests；
+- capabilities/schema 不兼容时 fail-safe。
 
-- 正确星期偏移；
-- 上月 / 下月；
-- 回到今天；
-- 选中日期；
-- 当前日期高亮；
-- 每日事件数量/标记。
+### Gate
 
-### 9.2 Calendar Event
+- Task 全部现有 Sync 测试仍通过；
+- 新 handler 接入不复制 coordinator；
+- snapshot / push / pull / conflict / rejected / tombstone 全部有测试；
+- Contract tests 在 LifeTrace 主仓库通过。
 
-新增正式：
+---
+
+## Phase F2：Project 完整纵向链
+
+### 实现
+
+- Domain / Entity / DAO / Migration；
+- Repository；
+- ViewModel；
+- Project CRUD；
+- 状态流转；
+- 项目详情；
+- 项目 Task 列表；
+- Task Project Selector；
+- 真实进度计算；
+- Archive；
+- Delete relation policy；
+- Outbox；
+- Project Sync Handler；
+- conflict / tombstone。
+
+### Gate
+
+设备 A 创建项目并给 Task 归属项目，设备 B 同步后项目、Task 归属和进度均正确；离线编辑后恢复同步正确。
+
+---
+
+## Phase F3：Task 全部高级能力
+
+### 实现
+
+- Reminder；
+- recurrence rule；
+- occurrence generation；
+- waiting item；
+- completion result；
+- dependency；
+- subtask；
+- 完整筛选；
+- Task Detail；
+- 每个辅助实体的 Room / Repository / Sync Handler；
+- 重复任务编辑策略（本次/以后/整个系列如产品契约需要）；
+- occurrence 幂等生成；
+- waiting workflow；
+- 删除/修改关联关系规则。
+
+### Gate
+
+- 重复任务跨重启不重复生成；
+- 跨设备 occurrence 一致；
+- waiting / reminder / dependency / completion 均持久化和同步；
+- Task Detail 不包含空操作。
+
+---
+
+## Phase F4：Calendar + Important Date + Reminder
+
+### 实现
+
+- 真实 `YearMonth` 月历；
+- Calendar Event / occurrence 完整纵向链；
+- Task 时间映射；
+- Important Date 完整纵向链；
+- 公历 / 农历 / yearly / once / leap month；
+- Reminder Repository；
+- Android Notification；
+- reboot/timezone reschedule；
+- Calendar / ImportantDate / Reminder Sync Handler；
+- 农历 golden vectors。
+
+### Gate
+
+- 月历日期数学正确；
+- 普通 Event CRUD + sync；
+- 单次/每年公历正确；
+- 单次/每年农历正确；
+- 闰月测试通过；
+- Notification 真机触发；
+- 重启后提醒仍存在。
+
+---
+
+## Phase F5：Collection 全类型 + Tags + Files
+
+### 实现
+
+全部六种入口：
 
 ```text
-ExecutionCalendarEvent
-CalendarEventEntity
-CalendarRepository
-CalendarViewModel
+文本 / 图片 / 语音 / 链接 / 文件 / 想法
 ```
 
-基础功能：
+并完成：
 
-- 新建事件；
-- 标题；
-- 开始/结束时间；
-- 全天；
-- 描述；
-- 编辑；
-- 删除；
-- 离线；
-- Cloud Sync。
+- Memo Domain / Room / Repository；
+- Tags / Relations；
+- Inbox；
+- 类型筛选；
+- Archive；
+- Delete；
+- Convert to Task；
+- file picker；
+- image picker；
+- audio/voice capture 或明确的 Android 音频采集流程；
+- upload state；
+- retry；
+- Cloud file API；
+- Memo / Tags / EntityLink Sync。
 
-### 9.3 Important Date
+### Gate
 
-实现 `execution.important_date`：
-
-- once / yearly；
-- solar / lunar；
-- birthday / anniversary / milestone / other；
-- 新建 / 编辑 / 删除；
-- 显示下一次发生日期；
-- 与日历聚合；
-- 提醒。
-
-农历转换必须使用经过验证的实现，并补边界测试，不允许使用浏览器原型中的占位转换逻辑。
-
-#### F4 Gate
-
-用户可以：
-
-```text
-打开真实当前月
-→ 新建日程
-→ 新建生日
-→ 在对应日期看到标记
-→ 重启 App 数据仍存在
-→ 第二设备同步后可看到相同内容
-```
+- 六种入口都产生真实可读取数据；
+- 文本类断网可创建；
+- 文件恢复联网可继续上传；
+- 转任务后关系真实存在；
+- 第二设备能看到业务元数据和有效文件引用。
 
 ---
 
-## 10. Phase F5：Collection 最小可用闭环
+## Phase F6：Daily Review + Weekly Review
 
-第一版先做高频、低权限的三种类型：
+### 实现
 
-- 文本；
-- 想法；
-- 链接。
+- Daily Review 持久化；
+- 真实 task/focus 完成统计；
+- rating / mood 可选择；
+- 保存 / 编辑；
+- 历史列表 / 详情；
+- Weekly Review；
+- Review Repository；
+- Sync；
+- conflict。
 
-图片 / 文件 / 语音放到基础闭环之后，不允许因为这些复杂能力阻塞“收集”本身可用。
+### Gate
 
-### 10.1 数据模型
-
-优先复用 Cloud `execution.memo`。
-
-最小字段：
-
-```text
-id
-userId
-type: text / idea / link
-title?
-content
-sourceUrl?
-createdAt
-updatedAt
-localVersion
-serverVersion
-modifiedByDevice
-```
-
-### 10.2 UI
-
-- 快速收集按钮真实打开输入；
-- 保存后立即进入 Inbox；
-- Inbox 展示真实条目；
-- 支持编辑；
-- 支持删除；
-- 支持类型筛选；
-- 空状态真实。
-
-#### F5 Gate
-
-飞行模式可以新增文本、关闭 App、重新打开后仍存在；恢复网络后可同步。
+复盘保存后重启不丢；第二设备可读；同日期并发编辑不 silent overwrite；Today 摘要与 Review 数据一致。
 
 ---
 
-## 11. Phase F6：Review 真实持久化
+## Phase F7：Goal / Habit 正式接入
 
-Review 不再使用只存在于 `remember` 的文本。
+### 实现
 
-### 11.1 数据
+- 盘点 LifeTrace 主仓库现有 Goal/Habit contract；
+- 复用现有真实数据模型；
+- 缺 contract 时先补主仓库 contract，而不是 Execute 自建第二套；
+- Android 本地映射 / Repository；
+- 今日习惯完成动作；
+- Goal/Focus 摘要；
+- Offline / Sync；
+- Today 数据接口准备。
 
-复用 LifeTrace 的 daily review 能力，字段至少包含：
+### Gate
 
-- reviewDate；
-- reflection；
-- learning；
-- tomorrowPlan；
-- moodScore；
-- completedTaskCount；
-- totalTaskCount；
-- createdAt / updatedAt。
-
-任务完成数量必须从真实 Task 查询生成。
-
-### 11.2 UI
-
-- 自动加载当天已保存 Review；
-- 编辑自动保留草稿或明确保存；
-- 心情 1-5 可选择；
-- 点击完成真实写入 DB；
-- 可以查看历史复盘列表。
-
-#### F6 Gate
-
-完成 Review 后杀进程重开，内容仍然存在并可再次编辑。
+Today 后续使用的 Goal/Habit 数据全部来自真实 Repository；不存在 Mock habit/goal；跨端最终一致。
 
 ---
 
-## 12. Phase F7：Reminder + Pomodoro
+## Phase F8：Pomodoro / FocusSession
 
-### 12.1 Task Reminder
+### 实现
 
-先实现基础可靠提醒：
-
-- Android 13+ 通知权限；
-- NotificationChannel；
-- Task Reminder 本地实体；
-- 创建/修改任务时调度提醒；
-- 删除/完成任务时取消对应提醒；
-- 设备重启/时间变化后重新调度。
-
-第一版可以接受系统调度的非严格毫秒级精度；是否申请 Exact Alarm 权限单独评估，不把高权限作为基础版本前置条件。
-
-### 12.2 Pomodoro
-
-不能只做 Compose 倒计时。
-
-状态模型至少持久化：
+持久化 Timer State：
 
 ```text
 mode
@@ -760,221 +805,360 @@ focusSeconds
 breakSeconds
 phase
 startedAt
-pausedAt?
-remainingSecondsWhenPaused?
-linkedTaskId?
+expectedEndAt
+pausedAt
+remainingSecondsWhenPaused
+linkedTaskId
 round
 ```
 
-计时必须基于真实时间差计算，而不是依赖每秒 coroutine 累减作为唯一事实来源。
-
-支持：
+完成：
 
 - 25/5；
 - 50/10；
-- 开始；
-- 暂停；
-- 恢复；
-- 重置；
-- 关联任务；
-- 页面切换不丢；
-- 进程恢复；
-- 完成通知；
-- 写入 `execution.focus_session`。
+- 用户偏好；
+- start / pause / resume / reset；
+- task link；
+- page switch；
+- background；
+- lock screen；
+- process death recovery；
+- notification；
+- focus/break transition；
+- FocusSession 历史；
+- Today focus stats；
+- Sync Handler。
 
-#### F7 Gate
+### Gate
 
-```text
-开始 25 分钟专注
-→ 切到其他页面
-→ App 退后台
-→ 再次打开
-→ 剩余时间正确
-→ 到时产生通知
-→ FocusSession 被保存
-```
-
----
-
-## 13. Phase F8：Profile / Device / Sync 可观测性
-
-Profile 不需要一次实现全部设置，但不能继续展示大量假入口。
-
-基础版本保留真实功能：
-
-- 当前用户 display name / email；
-- Cloud 连接状态；
-- 当前设备 ID / device name；
-- 最近同步时间；
-- pending outbox 数；
-- blocked 数；
-- conflicts 数；
-- 手动同步；
-- logout。
-
-如果 Cloud Device API 已稳定，再加入：
-
-- 设备列表；
-- 撤销设备 session。
-
-尚未实现的“主题、语言、隐私导出”等入口必须明确 disabled / coming later，不能伪装成可操作页面。
+- 前台计时误差满足长期计划标准；
+- 后台/锁屏恢复正确；
+- 强杀重启后状态可恢复或明确标记中断；
+- 一轮只产生一个 FocusSession；
+- sync retry 不重复 session。
 
 ---
 
-## 14. 测试策略
+## Phase F9：Today 最终真实聚合
 
-### 14.1 Unit Tests
+Today 放在主要数据源完成之后收口，避免再次做成 Mock 聚合页。
 
-必须覆盖：
+### 实现
 
-- wire mapper；
-- Repository transaction；
-- Outbox；
-- conflict resolution；
-- Sync handler；
+统一聚合：
+
+- Task / occurrence；
+- overdue；
+- Calendar；
+- Important Date；
+- Project；
+- Goal/Habit；
+- FocusSession；
+- Daily Review；
+- 真实用户与日期。
+
+完成 Today 所有点击行为、empty/loading/offline/syncing/error 状态。
+
+### Gate
+
+- 删除所有 Today 生产路径 `MockData`；
+- 所有统计都可由底层实体重算；
+- 其他端同步变化可以自动反映到 Today；
+- 日期/时区变化后当天数据正确刷新。
+
+---
+
+## Phase F10：Profile / Devices / Settings / Data
+
+### 实现
+
+- 真实用户资料；
+- Cloud connection；
+- device list；
+- revoke device；
+- sync health；
+- pending / blocked / conflict；
+- conflict center；
+- manual sync；
+- rebuild/snapshot；
+- notification preferences；
+- appearance；
+- general settings；
+- data management；
+- privacy export；
+- account deletion；
+- logout；
+- About / version/build。
+
+### Gate
+
+Profile 中不存在“看起来可以点但没有结果”的正式入口；数据管理类操作与 Cloud 真实结果一致。
+
+---
+
+## Phase F11：全实体 Sync / Offline / E2E / Release
+
+### Sync E2E
+
+至少覆盖：
+
+- A create → B pull；
+- B update → A pull；
+- duplicate changeId；
+- conflict；
+- keepLocal / keepServer；
+- tombstone；
+- 离线旧设备修改已删除实体；
+- snapshot rebuild；
+- cursor expired / snapshot required；
+- 100+ changes；
+- 多 entity 同时 pending；
+- token refresh；
+- device revoke；
+- file metadata + object storage；
+- App restart 后 outbox/cursor/conflict 保留。
+
+### Release 工程
+
+- Gradle Wrapper；
+- Debug / Release；
+- dev / staging / prod；
+- release signing secret 注入；
+- R8/ProGuard；
+- Room Migration Tests；
+- Unit Tests；
+- UI Tests；
+- Instrumentation Tests；
+- Staging E2E；
+- Crash / ANR 回归；
+- 性能基线；
+- 安全日志检查；
+- APK/AAB 可重复构建。
+
+---
+
+## 5. 自动化测试最低覆盖
+
+### 5.1 Unit
+
+- Task state；
+- Mapper；
 - recurrence；
-- YearMonth calendar generation；
-- important date occurrence；
-- pomodoro time recovery。
+- occurrence；
+- project progress；
+- date/time；
+- YearMonth；
+- lunar wrapper；
+- important date；
+- reminder calculation；
+- Pomodoro recovery；
+- Today aggregation；
+- retry classification；
+- conflict/rebase。
 
-### 14.2 Instrumentation / UI Smoke
+### 5.2 Room / Repository
 
-至少建立：
+每个正式业务实体至少验证：
 
-- Task 新建；
-- Project 新建；
-- Task 选择 Project；
-- Today 出现 Task；
-- Collection 保存；
-- Review 保存。
+- create；
+- update；
+- delete；
+- transaction；
+- outbox；
+- migration；
+- restart persistence；
+- pull apply；
+- tombstone；
+- conflict state。
 
-### 14.3 Sync E2E
+### 5.3 UI Smoke
 
-正式 Release 前必须执行：
+至少覆盖：
 
-1. A 新建 → B pull；
-2. B 修改 → A pull；
-3. 离线 A 修改 → 恢复网络；
-4. duplicate changeId；
-5. A/B 并发修改 conflict；
-6. delete tombstone；
-7. snapshot rebuild；
-8. cursor expired / snapshot required；
-9. 100+ changes batching；
-10. 多实体同时 pending outbox。
-
----
-
-## 15. 推荐开发批次
-
-不要一次开 8 个模块并行铺 UI。
-
-推荐按以下批次推进：
-
-```text
-Batch 1
-F0 Task 闭环 + Test Baseline
-
-Batch 2
-F1 Generic Sync Core
-
-Batch 3
-F2 Project + Task Project Relation
-
-Batch 4
-F3 Today Real Data
-
-Batch 5
-F4 Calendar + ImportantDate
-
-Batch 6
-F5 Collection
-
-Batch 7
-F6 Review
-
-Batch 8
-F7 Reminder + Pomodoro
-
-Batch 9
-F8 Profile / Sync Observability
-
-Batch 10
-Full E2E + Release
-```
-
-每个 Batch 必须独立达到：
-
-```text
-compile
-+ unit test
-+ lint
-+ local persistence
-+ offline smoke
-+ sync smoke（如果该模块需要云同步）
-+ docs update
-```
-
-前一 Batch 未达到 Gate，不进入下一批。
+1. 登录；
+2. 新建/编辑/完成 Task；
+3. Task conflict；
+4. Project + Task relation；
+5. recurrence task；
+6. waiting/reminder；
+7. Calendar Event；
+8. 公历 Important Date；
+9. 农历 Important Date；
+10. 文本收集；
+11. 图片收集；
+12. 语音收集；
+13. 文件收集；
+14. 收集转 Task；
+15. Daily Review；
+16. Weekly Review；
+17. Goal/Habit 今日动作；
+18. Pomodoro start/pause/recovery；
+19. Today 聚合；
+20. Device / Sync / Conflict Center；
+21. Logout。
 
 ---
 
-## 16. Foundation Release Gate
+## 6. 全功能 Release Gate
 
-只有以下全部满足，才能把项目状态从“开发原型”改成“基础可用版本”。
+以下条件 **全部满足** 才允许把 LifeTrace Execute 标记为 1.0 完成。
 
-### Core Data
+### Product
+
+- [ ] 五个一级导航全部是真实功能；
+- [ ] Today 完整真实聚合；
+- [ ] Task 全能力完成；
+- [ ] Project 全能力完成；
+- [ ] Calendar 全能力完成；
+- [ ] Important Date 全能力完成；
+- [ ] Collection 六种入口全部完成；
+- [ ] Daily Review 完成；
+- [ ] Weekly Review 完成；
+- [ ] Goal/Habit 接入完成；
+- [ ] Pomodoro 完成；
+- [ ] Reminder / Notification 完成；
+- [ ] Profile / Device / Settings / Data 完成。
+
+### No Shell
 
 - [ ] 生产路径无 `MockData`；
-- [ ] 核心可点击控件无空 `onClick`；
-- [ ] Task 正式 CRUD；
-- [ ] Project 正式 CRUD；
-- [ ] Calendar Event 正式 CRUD；
-- [ ] Important Date 正式 CRUD；
-- [ ] Collection text/idea/link 正式 CRUD；
-- [ ] Daily Review 正式持久化；
+- [ ] 无核心空 `onClick = {}`；
+- [ ] 无静态假用户/假统计；
+- [ ] 需要持久化的数据不使用 Compose `remember` 代替；
+- [ ] 未实现功能不得伪装成可用。
 
-### Execution
+### Local-first
 
-- [ ] Today 使用真实数据；
-- [ ] Task Project 归属；
-- [ ] Reminder 通知；
-- [ ] Pomodoro 进程恢复；
-- [ ] FocusSession 保存；
+- [ ] 核心业务无网络可读写；
+- [ ] App 重启数据不丢；
+- [ ] 网络失败不回滚已经成功的本地业务操作；
+- [ ] 所有同步写入 Entity + Outbox 同事务；
+- [ ] 所有 Room Schema 变更有 Migration + Migration Test。
 
-### Sync
+### Cloud / Sync
 
-- [ ] Sync Core 不再只支持 Task；
-- [ ] Project / Calendar / ImportantDate / Memo / Review 可同步；
-- [ ] conflict UI 可处理；
-- [ ] 双设备 E2E；
-- [ ] 离线恢复；
+- [ ] Generic Sync Core；
+- [ ] 全部需要同步的 1.0 实体接入；
+- [ ] snapshot / push / pull；
+- [ ] duplicate；
+- [ ] conflict；
+- [ ] rejected；
 - [ ] tombstone；
-- [ ] snapshot rebuild；
+- [ ] offline retry；
+- [ ] multi-device；
+- [ ] new-device restore；
+- [ ] user isolation；
+- [ ] file metadata / object storage；
+- [ ] typed contract/schema。
+
+### Android Platform
+
+- [ ] Android 13+ Notification Permission；
+- [ ] Notification Channels；
+- [ ] Reminder schedule/reschedule；
+- [ ] reboot/timezone recovery；
+- [ ] Pomodoro background/process recovery；
+- [ ] Insets / keyboard / compact viewport 正确；
+- [ ] 主要触控区域满足移动端可用性要求。
 
 ### Quality
 
-- [ ] 存在真实 Unit Tests；
-- [ ] assembleDebug PASS；
-- [ ] testDebugUnitTest PASS；
-- [ ] lintDebug PASS；
-- [ ] 关键 UI smoke PASS；
-- [ ] Room migration test PASS；
-- [ ] 文档状态与代码一致。
+- [ ] `:app:assembleDebug` PASS；
+- [ ] `:app:testDebugUnitTest` PASS 且包含真实业务测试；
+- [ ] `:app:lintDebug` PASS；
+- [ ] Release build PASS；
+- [ ] UI/Instrumentation 核心回归 PASS；
+- [ ] Staging Sync E2E PASS；
+- [ ] 双设备 E2E PASS；
+- [ ] 农历 golden vectors PASS；
+- [ ] Pomodoro recovery tests PASS；
+- [ ] 文件上传/重试 PASS；
+- [ ] 无核心 Crash / ANR；
+- [ ] 安全日志不泄漏 password/token/entity 正文。
+
+### Documentation
+
+- [ ] `REQUIREMENTS.md` 状态与实际一致；
+- [ ] `PROJECT_STATUS.md` 与实际一致；
+- [ ] `IMPLEMENTATION_LOG.md` 有提交与验证证据；
+- [ ] `UI_SPEC.md` 与最终 Android 行为无关键冲突；
+- [ ] `EXECUTION_PLAN.md` 中长期架构要求已落实或明确记录差异。
 
 ---
 
-## 17. 当前立即开始的任务
+## 7. 后续开发批次
 
-按优先级：
+推荐一个 Batch 对应一个 Phase 或一个 Phase 内可独立验收的纵向切片：
 
-1. 将现有 `TaskConflictResolutionSheet` 真正接入 `TasksScreen`；
-2. 建立 `app/src/test` 和第一批 Task 数据层测试；
-3. 修复 README / PROJECT_STATUS 文档漂移；
-4. 抽取 Task 专用 SyncCoordinator 为可注册 Handler 的 Sync Core；
-5. 建立 Project Domain / Room / Repository / UI / Sync；
-6. Task 编辑页接 Project 选择；
-7. Today 改为真实 Repository 聚合；
-8. 再进入 Calendar / Collection / Review。
+```text
+Batch 01  F0 Task Closure + Tests
+Batch 02  F1 Generic Sync + Contracts
+Batch 03  F2 Project
+Batch 04  F3 Task Advanced
+Batch 05  F4 Calendar + ImportantDate + Reminder
+Batch 06  F5 Collection + Files + Voice + Tags
+Batch 07  F6 Daily/Weekly Review
+Batch 08  F7 Goal/Habit
+Batch 09  F8 Pomodoro / FocusSession
+Batch 10  F9 Today Aggregation
+Batch 11  F10 Profile / Device / Settings / Data
+Batch 12  F11 Full E2E / Release Hardening
+```
 
-这 8 项完成后，LifeTrace Execute 才会从“Task Demo + 多页面外壳”进入真正的产品开发阶段。
+每个 Batch 完成后必须：
+
+1. 跑对应单元/数据库/UI 测试；
+2. 跑 `assembleDebug`；
+3. 跑 `testDebugUnitTest`；
+4. 跑 `lintDebug`；
+5. 执行该 Phase 特定 Smoke/E2E；
+6. 更新 `PROJECT_STATUS.md`；
+7. 更新 `IMPLEMENTATION_LOG.md`；
+8. 只有 Gate 全部满足后才进入下一 Phase。
+
+---
+
+## 8. 给后续 Agent / Codex 的执行约束
+
+开始开发前必须阅读：
+
+```text
+docs/README.md
+docs/development/README.md
+docs/development/REQUIREMENTS.md
+docs/development/FOUNDATION_EXECUTION_PLAN.md
+docs/development/PROJECT_STATUS.md
+docs/development/IMPLEMENTATION_LOG.md
+```
+
+涉及 UI 再读 `UI_SPEC.md`；涉及 Cloud/架构再读 `EXECUTION_PLAN.md`。
+
+执行时：
+
+1. 先检查当前 Phase 已完成到哪里；
+2. 不重复已经正确实现的基础设施；
+3. 以纵向业务闭环为单位修改代码；
+4. 不提前铺后续 Mock UI；
+5. 不因为上下文不足删减已确认功能；
+6. Cloud contract 缺失时先补 contract，不在 Android 猜 wire format；
+7. 数据库变更同步写 Migration/Test；
+8. 同步实体必须接 Generic Sync；
+9. 完成后提供真实测试/CI/E2E 证据；
+10. 未通过 Gate 的功能在文档中保持 `开发中`，禁止提前标记 `已完成`。
+
+---
+
+## 9. 当前立即开始的任务
+
+当前仍从 F0 开始，不因为目标扩大为“全部功能”而跳过基础质量：
+
+1. 接通 Task Conflict UI；
+2. 建立真实 `app/src/test`；
+3. 补 Task Mapper / Repository / Conflict / Rebase 测试；
+4. 确认 Task offline/conflict smoke；
+5. 抽取 Generic Sync Core；
+6. 加固 execution Cloud contracts；
+7. Project 完整纵向实现；
+8. 按 F3 → F11 连续推进，直到 **全功能 Release Gate 全部通过**。
+
+> 最终目标不是“做完一个 Foundation”，而是：**LifeTrace Execute 当前规划内的所有功能全部真实实现、全部可持久化、全部可离线运行、需要同步的全部可跨设备同步，并具备自动化测试与发布证据。**
