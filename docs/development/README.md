@@ -11,13 +11,13 @@
 1. [`REQUIREMENTS.md`](REQUIREMENTS.md)
    - 确认长期需求和产品约束；
 2. [`FOUNDATION_EXECUTION_PLAN.md`](FOUNDATION_EXECUTION_PLAN.md)
-   - 确认当前基础版本 Phase、执行顺序和 Gate；
+   - 确认当前全功能 1.0 Phase、执行顺序和 Gate；
 3. [`PROJECT_STATUS.md`](PROJECT_STATUS.md)
    - 确认哪些是真实实现、哪些仍是 Mock/UI 外壳；
 4. [`IMPLEMENTATION_LOG.md`](IMPLEMENTATION_LOG.md)
    - 查看最近已经提交并验证的实现证据；
 5. [`EXECUTION_PLAN.md`](EXECUTION_PLAN.md)
-   - 需要理解 1.0 长期架构和最终 Release Gate 时阅读；
+   - 需要理解长期架构、Cloud 约束和最终 Release Gate 时阅读；
 6. [`UI_SPEC.md`](UI_SPEC.md)
    - 涉及页面、导航、组件、视觉修改时阅读。
 
@@ -29,18 +29,20 @@
 
 为主要执行依据。
 
-它的优先级高于长期 `EXECUTION_PLAN.md` 中较宽泛的阶段顺序，因为当前最需要解决的问题不是“继续增加页面”，而是让已有核心模块达到真实可用状态。
+从 2026-08-30 起，该文件不再只是“基础可用版本”计划，而是 **LifeTrace Execute 当前规划内全部功能的 1.0 交付执行计划**。阶段可以分批实现，但最终 Release Gate 不允许裁剪已经确认或已经设计的功能。
 
 ## 模块完成标准
 
 任何业务模块只有同时满足下面的纵向链，才可以在 `PROJECT_STATUS.md` 中标记为已实现：
 
 ```text
+Requirement / Product Rule
+    ↓
 Domain Model
     ↓
-Room Entity / DAO
+Room Entity / DAO / Migration
     ↓
-Repository
+Repository / UseCase
     ↓
 ViewModel / UI State
     ↓
@@ -48,7 +50,7 @@ Compose UI
     ↓
 Offline behavior
     ↓
-Sync（需要云同步的实体）
+Sync / File / Notification（适用时）
     ↓
 Automated Tests
     ↓
@@ -106,28 +108,34 @@ Project offline/sync smoke
 
 ## 当前执行顺序
 
-简化后的 Foundation 顺序：
+全功能 1.0 Phase 顺序：
 
 ```text
-F0  Task 冲突闭环 + Unit Test 基线
+F0   Task 冲突闭环 + 真实测试基线
  ↓
-F1  Generic Sync Core
+F1   Generic Sync Core + Execution Contracts
  ↓
-F2  Project 完整纵向链
+F2   Project 完整纵向链
  ↓
-F3  Today 真实聚合
+F3   Task 高级能力
+     recurrence / occurrence / waiting / reminder /
+     dependency / completion / subtask
  ↓
-F4  Calendar + ImportantDate
+F4   Calendar + ImportantDate + Reminder / Notification
  ↓
-F5  Collection 最小真实闭环
+F5   Collection 六类入口 + Tags + Files + Voice
  ↓
-F6  Review 持久化
+F6   Daily Review + Weekly Review
  ↓
-F7  Reminder + Pomodoro
+F7   Goal / Habit 正式接入
  ↓
-F8  Profile / Device / Sync Observability
+F8   Pomodoro / FocusSession
  ↓
-F9  双设备 / Offline / Migration / Release Gate
+F9   Today 最终真实聚合
+ ↓
+F10  Profile / Devices / Settings / Data
+ ↓
+F11  全实体 Sync / Offline / E2E / Release
 ```
 
 具体任务和验收条件以 `FOUNDATION_EXECUTION_PLAN.md` 为准。
@@ -136,7 +144,7 @@ F9  双设备 / Offline / Migration / Release Gate
 
 ### REQUIREMENTS.md
 
-只记录产品意图和长期需求，不记录日常 commit 流水账。
+记录产品意图和长期需求，不记录日常 commit 流水账。
 
 ### FOUNDATION_EXECUTION_PLAN.md
 
@@ -145,7 +153,7 @@ F9  双设备 / Offline / Migration / Release Gate
 - Phase 顺序发生变化；
 - 发现新的关键依赖；
 - Definition of Done / Gate 需要调整；
-- 当前基础版本范围明确变更。
+- 当前 1.0 交付范围发生明确变化。
 
 ### PROJECT_STATUS.md
 
@@ -158,62 +166,71 @@ F9  双设备 / Offline / Migration / Release Gate
 记录事实证据：
 
 - 实现内容；
-- 关键文件；
-- commit SHA；
-- CI run；
-- 测试结果；
-- 已知阻塞。
-
-不要在这里写未来计划。
+- commit / PR；
+- 测试与 CI；
+- E2E / smoke；
+- 已知限制。
 
 ### EXECUTION_PLAN.md
 
-保持为 1.0 长期路线，不需要每个小迭代都修改。
+保留长期架构、Cloud、测试、性能、安全与 Release 设计。若它与当前具体 Phase 顺序不一致，当前执行顺序以 `FOUNDATION_EXECUTION_PLAN.md` 为准；产品范围冲突仍以 `REQUIREMENTS.md` 为最高依据。
 
 ### UI_SPEC.md
 
-只维护 UI/UX 规则，不把业务逻辑要求混进视觉规范。
+页面、导航、组件和视觉交互基线。已经确认的 UI 功能不得在 Android 实现时静默删除。
 
-## 每批开发完成检查表
+## 每个开发批次的固定闭环
 
-提交一批功能前至少检查：
-
-- [ ] 是否仍有生产路径引用 MockData；
-- [ ] 是否存在空 `onClick = {}`；
-- [ ] App 重启后数据是否保留；
-- [ ] 断网情况下核心写入是否成功；
-- [ ] 需要同步的数据是否进入 Outbox；
-- [ ] 网络恢复后是否能自动同步；
-- [ ] 是否有真实业务测试；
-- [ ] 是否需要 Room migration；
-- [ ] assembleDebug 是否通过；
-- [ ] testDebugUnitTest 是否实际执行测试；
-- [ ] lintDebug 是否通过；
-- [ ] PROJECT_STATUS 是否和代码一致；
-- [ ] IMPLEMENTATION_LOG 是否记录验证证据。
-
-## 新 Agent 启动模板
-
-后续可以直接把下面的约束交给开发 Agent：
+每个 Batch 至少执行：
 
 ```text
-你正在继续开发 LifeTrace-execute。
-
-开始前必须阅读：
-1. docs/README.md
-2. docs/development/README.md
-3. docs/development/REQUIREMENTS.md
-4. docs/development/FOUNDATION_EXECUTION_PLAN.md
-5. docs/development/PROJECT_STATUS.md
-6. docs/development/IMPLEMENTATION_LOG.md
-
-执行当前 Foundation Phase，不要跳阶段去铺新的 UI 外壳。
-一个模块只有完成 Domain → Room → Repository → ViewModel → UI → Offline/Sync → Tests 才算实现。
-生产路径禁止新增 MockData 和空 onClick。
-
-完成后：
-- 运行对应测试/CI；
-- 更新 PROJECT_STATUS.md；
-- 把 commit/测试证据记录到 IMPLEMENTATION_LOG.md；
-- 未验证的内容不得标记为已完成。
+代码实现
+  ↓
+相关 Unit / DB / UI Tests
+  ↓
+:app:assembleDebug
+:app:testDebugUnitTest
+:app:lintDebug
+  ↓
+Phase 特定 Smoke / E2E
+  ↓
+PROJECT_STATUS.md
+  ↓
+IMPLEMENTATION_LOG.md
 ```
+
+只有 Gate 有真实证据后才能进入下一阶段。
+
+## 禁止事项
+
+后续开发禁止：
+
+- 仅因为页面可以打开就标记模块完成；
+- 用 Compose `remember` 代替业务数据持久化；
+- 用 MockData 填充生产页面并计入完成度；
+- 为每个实体复制一份独立 Sync Coordinator；
+- 新增数据库字段却不提供 migration；
+- CI 中没有真实业务测试却宣称“单测完成”；
+- 将图片/文件/语音等已确认能力长期留作假入口；
+- 将 recurrence、waiting、reminder、dependency、review、device 等已确认功能以“首版裁剪”跳过；
+- 在文档中提前写“已完成”而代码或验证证据尚未满足 Gate。
+
+## Agent / Codex 使用建议
+
+给开发 Agent 分配任务时，应引用明确文档路径，例如：
+
+```text
+先阅读：
+- docs/README.md
+- docs/development/README.md
+- docs/development/REQUIREMENTS.md
+- docs/development/FOUNDATION_EXECUTION_PLAN.md
+- docs/development/PROJECT_STATUS.md
+
+然后从当前未完成的 Phase 开始执行。
+不要跳阶段铺 Mock UI。
+最终目标是 F0 → F11 全部 Gate 通过，而不是只完成 Foundation 外壳。
+完成每个 Batch 后运行对应测试，并更新 PROJECT_STATUS.md 与 IMPLEMENTATION_LOG.md。
+```
+
+这样可以减少后续 Agent 因上下文不足而重新走回“先铺页面”或“先做最小版”的旧路线。
