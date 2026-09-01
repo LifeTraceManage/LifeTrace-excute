@@ -26,13 +26,27 @@ interface SyncEntityAdapter {
         serverVersion: String,
     )
 
-    /**
-     * Returns a full snapshot payload rebased to [serverVersion].
-     * Null means the local entity no longer exists (for example a queued delete).
-     */
+    /** Returns a full local snapshot rewritten onto [serverVersion]. */
     suspend fun payloadForRebase(
         userId: String,
         entityId: String,
         serverVersion: String,
     ): String?
+
+    /**
+     * Mutates the local record for an explicit "keep local" conflict choice and
+     * returns the full snapshot that must be queued against the latest server version.
+     */
+    suspend fun rebaseLocalConflict(
+        userId: String,
+        entityId: String,
+        currentServerVersion: String,
+        deviceId: String,
+    ): RebasedLocalEntity
 }
+
+data class RebasedLocalEntity(
+    val payloadJson: String,
+    val clientModifiedAt: String,
+    val dependenciesJson: String = "[]",
+)
