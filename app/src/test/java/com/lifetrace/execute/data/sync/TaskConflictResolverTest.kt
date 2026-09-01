@@ -1,5 +1,6 @@
 package com.lifetrace.execute.data.sync
 
+import android.app.Application
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -23,7 +24,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35])
+@Config(sdk = [35], application = Application::class)
 class TaskConflictResolverTest {
     private lateinit var database: LifeTraceExecuteDatabase
     private lateinit var resolver: TaskConflictResolver
