@@ -5,6 +5,9 @@ import com.lifetrace.execute.data.local.toDomain
 import com.lifetrace.execute.data.local.toEntity
 import com.lifetrace.execute.data.repository.TaskRepository
 import com.lifetrace.execute.data.repository.TaskWireMapper
+import org.json.JSONArray
+import org.json.JSONObject
+import java.time.Instant
 
 class TaskSyncEntityAdapter(
     private val database: LifeTraceExecuteDatabase,
@@ -42,4 +45,38 @@ class TaskSyncEntityAdapter(
         ?.toDomain()
         ?.copy(serverVersion = serverVersion)
         ?.let(TaskWireMapper::toPayload)
+
+    override suspend fun rebaseLocalConflict(
+        userId: String,
+        entityId: String,
+        currentServerVersion: String,
+        deviceId: String,
+    ): RebasedLocalEntity {
+        val current = dao.getTask(userId, entityId)?.toDomain()
+            ?: error("本地任务已不存在，无法保留本地版本")
+        val now = Instant.now().toString()
+        val rebased = current.copy(
+            updatedAt = now,
+            localVersion = current.localVersion + 1,
+            serverVersion = currentServerVersion,
+            modifiedByDevice = deviceId,
+        )
+        dao.upsertTask(rebased.toEntity())
+
+        val dependencies = JSONArray().also { array ->
+            rebased.projectId?.let { projectId ->
+                array.put(
+                    JSONObject()
+                        .put("entityType", "execution.project")
+                        .put("entityId", projectId)
+                )
+            }
+        }.toString()
+
+        return RebasedLocalEntity(
+            payloadJson = TaskWireMapper.toPayload(rebased),
+            clientModifiedAt = now,
+            dependenciesJson = dependencies,
+        )
+    }
 }
