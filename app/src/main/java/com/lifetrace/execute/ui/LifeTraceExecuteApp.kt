@@ -80,10 +80,7 @@ fun LifeTraceExecuteApp() {
                                 }
                             },
                             icon = {
-                                Icon(
-                                    destination.icon,
-                                    contentDescription = destination.label
-                                )
+                                Icon(destination.icon, contentDescription = destination.label)
                             },
                             label = { Text(destination.label) },
                             colors = NavigationBarItemDefaults.colors(
@@ -121,7 +118,8 @@ fun LifeTraceExecuteApp() {
             composable("projects") {
                 ProjectsScreen(
                     contentPadding = innerPadding,
-                    onProfile = { navController.navigate("profile") }
+                    onProfile = { navController.navigate("profile") },
+                    onCloudConnection = { navController.navigate("cloud") },
                 )
             }
             composable("calendar") {
