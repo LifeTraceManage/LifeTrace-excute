@@ -1,5 +1,6 @@
 package com.lifetrace.execute.data.repository
 
+import android.app.Application
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -12,6 +13,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -20,7 +22,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35])
+@Config(sdk = [35], application = Application::class)
 class TaskRepositoryTest {
     private lateinit var database: LifeTraceExecuteDatabase
     private lateinit var repository: TaskRepository
@@ -110,12 +112,16 @@ class TaskRepositoryTest {
         assertEquals(2, database.dao().observePendingOutboxCount("user-1").first())
     }
 
-    @Test(expected = IllegalArgumentException::class)
-    fun blankTitleIsRejectedBeforeAnyDatabaseWrite() = runBlocking {
-        repository.createTask(
-            userId = "user-1",
-            deviceId = "device-a",
-            title = "   ",
-        )
+    @Test
+    fun blankTitleIsRejectedBeforeAnyDatabaseWrite() {
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                repository.createTask(
+                    userId = "user-1",
+                    deviceId = "device-a",
+                    title = "   ",
+                )
+            }
+        }
     }
 }
